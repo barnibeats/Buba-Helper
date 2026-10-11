@@ -1,0 +1,49 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        shell: cmd
+        run: build.cmd
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash bin\WinInstaller.exe -Algorithm SHA256).Hash.ToLower()
+          "$h *WinInstaller.exe" | Out-File -Encoding ascii bin\WinInstaller.exe.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinInstaller
+          path: |
+            bin/WinInstaller.exe
+            bin/WinInstaller.exe.sha256
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: WinInstaller
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/WinInstaller.exe
+            dist/WinInstaller.exe.sha256
+          generate_release_notes: true

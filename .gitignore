@@ -1,0 +1,21 @@
+# build output
+bin/
+obj/
+*.exe
+*.pdb
+
+# runtime artefacts
+install.log
+profile.ini
+Images/
+Drivers/
+tools/
+
+# local, company-specific sysprep kit (contains accounts, passwords, license servers) - never publish
+sysprep/
+
+# editors / OS
+.vs/
+.vscode/
+*.user
+Thumbs.db
