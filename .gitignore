@@ -19,3 +19,7 @@ sysprep/
 .vscode/
 *.user
 Thumbs.db
+
+# настройки генератора и журналы (могут содержать пароли)
+generator-settings.json
+*.log

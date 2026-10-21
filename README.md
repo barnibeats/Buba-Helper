@@ -1,10 +1,10 @@
-# win-install-helper
+# Buba-Helper
 
 [![build](https://github.com/barnibeats/win-install-helper/actions/workflows/build.yml/badge.svg)](https://github.com/barnibeats/win-install-helper/actions/workflows/build.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![platform: WinPE / Windows 10-11](https://img.shields.io/badge/platform-WinPE%20%7C%20Windows%2010%E2%80%9311-lightgrey)
 
-Графическая утилита для **WinPE** (Sergei Strelec и др.): выбрать ISO/WIM/ESD с флешки, диск, разметку GPT/MBR и размер раздела — и получить установленную Windows с рабочим загрузчиком. Плюс захват sysprep-образа в WIM.
+Графическая утилита для **WinPE** (Sergei Strelec и др.) и обычной Windows. Три режима: **установка** Windows из ISO/WIM/ESD с выбором диска и разметки GPT/MBR, **захват** sysprep-образа в WIM и **генератор файла ответов** (utounattend.xml / unattend.xml), встроенный в программу. Генератор — порт [generator_XML_Windows](https://github.com/barnibeats/generator_XML_Windows) на C#.
 Один `exe`, без установки и зависимостей, кроме .NET Framework 4.
 
 > **In short:** a single-file WinForms tool for WinPE that automates *pick image → pick disk → partition (GPT/MBR, size in MB) → apply (DISM) → boot files (bcdboot UEFI/BIOS)*, can reinstall only the Windows partition and keep the rest, supports unattend XML, driver injection, SHA-256 verification, reusable profiles and a fully automatic mode. It can also capture a sysprepped Windows partition into a `.wim`. UI is in Russian.
@@ -27,11 +27,20 @@
 
 **Профили и авторежим**
 - Настройки сохраняются в `.ini` (см. [`docs/profile.example.ini`](docs/profile.example.ini)); `profile.ini` рядом с exe подхватывается сам.
-- `WinInstaller.exe --profile office.ini --auto` — сама находит образ по имени, выбирает единственный внутренний диск и запускает установку.
+- `Buba-Helper.exe --profile office.ini --auto` — сама находит образ по имени, выбирает единственный внутренний диск и запускает установку.
 
 **Захват образа (sysprep)**
 - Офлайн-проверка, что система обобщена (`GeneralizationState = 7`).
 - `dism /Capture-Image /CheckIntegrity`, необязательный XML ответов (на время захвата кладётся в `Windows\Panther\Unattend`, потом раздел возвращается как был), проверка заголовка и запись `.sha256`.
+
+**Файл ответов (XML)** — встроенный генератор
+- Чистая установка (`autounattend.xml`) и образ Sysprep (`unattend.xml`), Windows 10 и 11. 13 страниц: язык, установка и диск, система, пользователи, 70 твиков с поиском, Защитник, сеть и доступ, активация, удаление приложений, программы, скрипты, планировщик; страница «Результат» — предупреждения (щелчок ведёт к нужному полю), предпросмотр, сохранение XML и комплекта файлов.
+- Быстрый старт **«Windows 10 Pro без OOBE»**: Pro по универсальному ключу, ручная разметка (диск не стирается), пропуск всех экранов OOBE, локальный пользователь. Плюс пресеты оригинала (дом, офис, приватность, разработчик, киоск).
+- Кнопки «Использовать для установки» / «Для захвата образа» подставляют готовый XML в нужное поле. Настройки совместимы с JSON оригинального генератора (внимание: пароли в них лежат открытым текстом).
+- Результат совпадает с оригиналом **посимвольно**: `devtools/gen-compare.js` сверяет XML, предупреждения и `Start-Sysprep.cmd` на тысячах случайных состояний. Интерфейс проверяет встроенный «обезьяний» тест (`--selftest-ui`).
+| Генератор: быстрый старт | Генератор: результат |
+|---|---|
+| ![xml-quickstart](docs/screenshots/xml-quickstart.png) | ![xml-result](docs/screenshots/xml-result.png) |
 
 | Режим «только раздел Windows» | Захват образа |
 |---|---|
@@ -39,11 +48,11 @@
 
 ## Быстрый старт
 
-1. Скачайте `WinInstaller.exe` из [Releases](../../releases) (рядом лежит `.sha256`) или соберите сами (ниже).
+1. Скачайте `Buba-Helper.exe` из [Releases](../../releases) (рядом лежит `.sha256`) или соберите сами (ниже).
 2. Положите на флешку вместе с образами. Необязательно: папка `Drivers\`, `tools\7z.exe`, `profile.ini`.
-3. В WinPE запустите `WinInstaller.exe`, выберите образ → диск → разметку → **УСТАНОВИТЬ WINDOWS**.
+3. В WinPE запустите `Buba-Helper.exe`, выберите образ → диск → разметку → **УСТАНОВИТЬ WINDOWS**.
 
-Проверить сценарий, ничего не выполняя: `WinInstaller.exe --dry-run` (команды `diskpart`/`dism`/`bcdboot` только пишутся в лог).
+Проверить сценарий, ничего не выполняя: `Buba-Helper.exe --dry-run` (команды `diskpart`/`dism`/`bcdboot` только пишутся в лог).
 
 ## Сборка
 
@@ -53,7 +62,7 @@
 build.cmd
 ```
 
-Результат — `bin\WinInstaller.exe`. Исходник — один файл [`src/WinInstaller.cs`](src/WinInstaller.cs) (C# 5).
+Результат — `bin\Buba-Helper.exe`. Исходники лежат в [`src/`](src) (C# 5); генератор XML — в [`src/Gen/`](src/Gen) (данные берутся из `gendata.json`, вшитого в exe; обновить его из оригинала: `node devtools/export-gen-data.js <путь к generator_XML_Windows>`); оформление — `Theme.cs`. `Program.cs`, `Models.cs`, `Util.cs`, `Native.cs`, `IsoMount.cs`, `WimReader.cs` и главная форма `MainForm*.cs`, разбитая на части (`partial class`): интерфейс и мастер, диски, источник, разметка, профили, захват, установка. `build.cmd` собирает все `src\*.cs`.
 
 ## Командная строка
 
@@ -62,6 +71,10 @@ build.cmd
 | `--dry-run` | ничего не выполнять, только лог |
 | `--profile <файл.ini>` | загрузить профиль |
 | `--auto` | (с `--profile`) выбрать диск по правилу и перейти к установке с обычным подтверждением |
+| `--export-icon <файл.ico>` | записать значок приложения (нужен только для пересборки `assets\app.ico`) |
+| `--gen <настройки.json> <out.xml>` | сгенерировать файл ответов без окна (`--preset <id>`, `--launcher <файл.cmd>`); рядом пишется `out.xml.log` с предупреждениями |
+| `--mode install/capture/xml`, `--page N` | открыть окно сразу в нужном режиме и на нужной странице |
+| `--selftest-ui <отчёт.txt> [N] [seed]` | самопроверка интерфейса генератора |
 | `--yes` | пропустить подтверждение. **Опасно:** диск стирается без вопроса. Только вместе с `--auto` |
 
 `disk=auto` в профиле — единственный внутренний (не USB) диск; в режиме `keep` — единственный диск с установленной Windows. Если однозначно выбрать нельзя, ничего не запускается.
