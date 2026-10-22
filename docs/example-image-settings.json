@@ -1,0 +1,15 @@
+{
+  "mode": "sysprep",
+  "os": "10",
+  "locale": { "ui": "ru-RU", "user": "ru-RU", "system": "ru-RU", "kbd": ["0409:00000409", "0419:00000419"], "kbdDefault": "0409:00000409", "tz": "Russian Standard Time" },
+  "users": [ { "name": "Operator", "display": "Operator", "pass": "", "group": "Administrators", "desc": "", "neverExp": true, "hidden": false } ],
+  "admin": { "enable": true, "pass": "", "hide": false },
+  "sys": { "hideEula": true, "hideOEM": true, "hideOnline": true, "hideWireless": true, "express": true, "netLoc": "Work" },
+  "def": { "mode": "keep", "exclPaths": "C:\\Program Files\\MyApp\nC:\\Tools", "exclExt": "", "exclProc": "myapp.exe" },
+  "fw": { "progs": "C:\\Program Files\\MyApp\\myapp.exe", "dirs": "C:\\Tools", "tcpIn": "1433, 4890-4899", "udpIn": "1434", "tcpOut": "2303", "defender": true },
+  "lnk": { "dir": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\MyApp", "map": "Main.lnk = Main (renamed).lnk", "desktop": "Main (renamed).lnk" },
+  "wall": { "on": true, "path": "C:\\Tools\\logo.jpg", "style": "fit", "lock": true, "black": true },
+  "tweaks": { "noautoupdate": true, "nosearchbox": true, "notaskview": true, "nomeetnow": true, "lockthemes": true, "nowuforusers": true, "admindeskicons": true, "hidepcfolders": true },
+  "tasks": [ { "name": "job", "program": "C:\\Tools\\job.exe", "args": "", "workdir": "C:\\Tools\\", "trigger": "interval", "n": 15, "runAs": "system", "highest": true, "runNow": false,
+    "folder": "IT", "limit": 60, "restart": true, "ignoreNew": true, "needExe": true } ]
+}
