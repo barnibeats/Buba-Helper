@@ -37,7 +37,7 @@ namespace WinInstaller
         void ApplyModeLayout()
         {
             bool keep = rbKeep.Checked;
-            lblSize.Visible = keep ? false : true; nudSize.Visible = !keep; lblSizeHint.Visible = !keep;
+            lblSize.Visible = !keep; nudSize.Visible = !keep; nudSizeBox.Visible = !keep; lblSizeHint.Visible = !keep;
             chkAll.Visible = !keep; chkData.Visible = !keep;
             lblPart.Visible = keep; cmbPart.Visible = keep;
             rbGpt.Enabled = !keep; rbMbr.Enabled = !keep;

@@ -15,25 +15,23 @@ namespace WinInstaller
             if (xml) EnsureGen();
             tabCapture.Visible = cap;
             tabInstall.Visible = !cap && !xml;
+            navSteps.Visible = !xml;
             if (genEditor != null) genEditor.Visible = xml;
-            progress.Visible = lblStatus.Visible = txtLog.Visible = !xml;
+            progress.Visible = lblStatus.Visible = btnLog.Visible = !xml;
+            pnlLog.Visible = logOpen && !xml;
             LayoutFooter(xml);
             btnInstall.Text = cap ? "ЗАХВАТИТЬ ОБРАЗ" : "УСТАНОВИТЬ WINDOWS";
+            if (!xml) RebuildNav();
             if (cap) RefreshVolumes();
             UpdateNav();
         }
 
-        /// <summary>Кнопки «Назад/Далее» под вкладками установки и внизу окна в режиме генератора (там нет журнала).</summary>
+        /// <summary>Нижняя полоса: в режиме генератора нет прогресса и статуса, поэтому она ниже, а кнопки выше.</summary>
         void LayoutFooter(bool xml)
         {
-            int fy = xml ? ClientSize.Height - 52 : 358;
-            AnchorStyles v = xml ? AnchorStyles.Bottom : AnchorStyles.Top;
-            btnBack.Anchor = v | AnchorStyles.Left;
-            btnNext.Anchor = v | AnchorStyles.Right;
-            btnInstall.Anchor = v | AnchorStyles.Right;
-            lblNavHint.Anchor = v | AnchorStyles.Left | AnchorStyles.Right;
-            btnBack.Top = btnNext.Top = btnInstall.Top = lblNavHint.Top = fy;
-            if (genEditor != null) genEditor.SetBounds(0, 48, ClientSize.Width, fy - 56);
+            footer.Height = xml ? 72 : 108;
+            int by = xml ? 16 : 58;
+            btnBack.Top = btnNext.Top = btnInstall.Top = lblNavHint.Top = by;
         }
 
         void EnsureGen()
@@ -43,15 +41,15 @@ namespace WinInstaller
             try
             {
                 genEditor = new GenEditor();
-                genEditor.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+                genEditor.Dock = DockStyle.Fill;
                 genEditor.StatePath = Path.Combine(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Buba-Helper"), "generator-settings.json");
                 genEditor.LoadFromFile(genEditor.StatePath);
                 genEditor.IndexChanged += delegate { UpdateNav(); };
                 genEditor.Regenerated += delegate { UpdateNav(); };
                 genEditor.UseXml += OnUseXml;
-                Controls.Add(genEditor);
-                genEditor.SetBounds(0, 48, ClientSize.Width, ClientSize.Height - 52 - 56);
                 genEditor.Visible = false;
+                body.Controls.Add(genEditor);
+                genEditor.BringToFront();   // заполняющий контрол «докуется» последним, после бокового меню
                 genEditor.Go(0);
             }
             finally { UseWaitCursor = false; }
@@ -65,14 +63,14 @@ namespace WinInstaller
                 txtXml.Text = path;
                 rbModeCapture.Checked = true;
                 Log("Файл ответов из генератора выбран для захвата образа: " + path);
-                MessageBox.Show(this, "Файл ответов выбран для захвата образа (шаг «3. XML и запуск»).", "Файл ответов");
+                MessageBox.Show(this, "Файл ответов выбран для захвата образа (шаг «XML и запуск»).", "Файл ответов");
             }
             else
             {
                 txtInstXml.Text = path;
                 rbModeInstall.Checked = true;
                 Log("Файл ответов из генератора выбран для установки: " + path);
-                MessageBox.Show(this, "Файл ответов выбран для установки (шаг «4. Настройки», поле «XML ответов»).\n\nПри установке этой программой образ применяется через DISM, поэтому из файла используются этапы specialize и oobeSystem (пользователи, пропуск OOBE, твики). Диск и редакцию вы выбираете на вкладках установки.", "Файл ответов");
+                MessageBox.Show(this, "Файл ответов выбран для установки (шаг «Настройки», поле «XML файл ответов»).\n\nПри установке этой программой образ применяется через DISM, поэтому из файла используются этапы specialize и oobeSystem (пользователи, пропуск OOBE, твики). Диск и редакцию вы выбираете на вкладках установки.", "Файл ответов");
             }
         }
     }

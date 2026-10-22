@@ -36,8 +36,8 @@ namespace WinInstaller
                 else if (rbKeep.Checked && sourceDisks.Contains(d.Number)) vols = "(на диске лежит образ - его раздел защищён)  " + vols;
                 ListViewItem it = new ListViewItem(new string[] { d.Number.ToString(), d.Model, Util.FmtSize(d.Size), d.Bus, d.Style, vols });
                 it.Tag = d;
-                if (d.Blocked) it.ForeColor = Color.Gray;
-                else if (d.Bus == "USB") it.ForeColor = Color.DarkOrange;
+                if (d.Blocked) it.ForeColor = Theme.Muted;
+                else if (d.Bus == "USB") it.ForeColor = Theme.Warn;
                 lvDisks.Items.Add(it);
                 if (d.Number == sel && !d.Blocked) it.Selected = true;
             }

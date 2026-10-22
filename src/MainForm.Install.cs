@@ -174,7 +174,7 @@ namespace WinInstaller
             UI(delegate
             {
                 lblStatus.Text = "ОШИБКА: " + msg;
-                lblStatus.ForeColor = Color.Firebrick;
+                lblStatus.ForeColor = Theme.Danger;
                 MessageBox.Show(this, msg + "\n\nПодробности - в логе и в файле install.log.", "Ошибка установки", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 FinishUi();
             });
@@ -186,6 +186,8 @@ namespace WinInstaller
             btnInstall.Enabled = !w;
             tabInstall.Enabled = !w; tabCapture.Enabled = !w;
             rbModeInstall.Enabled = !w; rbModeCapture.Enabled = !w; rbModeXml.Enabled = !w;
+            navSteps.Enabled = !w;
+            if (w) ShowLog(true);   // во время работы журнал виден сразу
             UpdateNav();
         }
 
@@ -200,7 +202,7 @@ namespace WinInstaller
         {
             try
             {
-                UI(delegate { lblStatus.ForeColor = SystemColors.ControlText; });
+                UI(delegate { lblStatus.ForeColor = Theme.Text; });
                 string dism = Util.FindTool("dism.exe");
                 string bcdboot = Util.FindTool("bcdboot.exe");
                 if (!p.DryRun && (dism == null || bcdboot == null)) { Fail("Не найден dism.exe или bcdboot.exe"); return; }
@@ -442,10 +444,12 @@ namespace WinInstaller
                 f.Text = "Готово"; f.FormBorderStyle = FormBorderStyle.FixedDialog;
                 f.StartPosition = FormStartPosition.CenterParent; f.ClientSize = new Size(440, 160);
                 f.MinimizeBox = false; f.MaximizeBox = false; f.ShowInTaskbar = false; f.Font = Font;
+                f.BackColor = Theme.Bg; f.ForeColor = Theme.Text;
+                f.HandleCreated += delegate { Dark.Title(f.Handle); };
                 Label l = Add(f, new Label(), 16, 14, 408, 90);
-                l.Font = new Font(Font.FontFamily, 11f, FontStyle.Bold);
-                Button b1 = Add(f, new AeroButton { Text = "Перезагрузить сейчас", DialogResult = DialogResult.Yes }, 16, 112, 200, 34);
-                Button b2 = Add(f, new AeroButton { Text = "Отмена", DialogResult = DialogResult.No }, 224, 112, 200, 34);
+                l.Font = Theme.Big;
+                Button b1 = Add(f, new UiButton { Text = "Перезагрузить сейчас", DialogResult = DialogResult.Yes, Primary = true }, 16, 112, 200, 34);
+                Button b2 = Add(f, new UiButton { Text = "Отмена", DialogResult = DialogResult.No }, 224, 112, 200, 34);
                 f.AcceptButton = b1; f.CancelButton = b2;
                 int left = seconds;
                 Action upd = delegate { l.Text = "Установка завершена.\nВЫТАЩИТЕ УСТАНОВОЧНУЮ ФЛЕШКУ!\n\nПерезагрузка через " + left + " с."; };

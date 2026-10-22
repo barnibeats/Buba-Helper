@@ -52,6 +52,7 @@ namespace WinInstaller
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            Dark.Init();
             try { Application.Run(new MainForm(profile, auto, yes)); }
             catch (Exception ex) { MessageBox.Show(ex.ToString(), "WinInstaller - критическая ошибка"); }
         }

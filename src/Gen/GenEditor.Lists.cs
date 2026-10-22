@@ -15,9 +15,10 @@ namespace WinInstaller
 
         class ItemView
         {
-            public Panel Panel;
+            public UiCard Panel;
             public RowCtx Ctx = new RowCtx();
             public Control First;
+            public List<Control> Hdr = new List<Control>();   // кнопки в заголовке элемента, справа налево
         }
 
         class ListInfo
@@ -25,8 +26,9 @@ namespace WinInstaller
             public string Key, AddCaption, EmptyText;
             public GRow Holder;
             public List<ItemView> Items = new List<ItemView>();
-            public AeroButton Add;
+            public UiButton Add;
             public Label Empty;
+            public int W = 600;
         }
 
         readonly Dictionary<string, ListInfo> lists = new Dictionary<string, ListInfo>();
@@ -42,24 +44,35 @@ namespace WinInstaller
             }
         }
 
+        static Control FirstInput(Control root)
+        {
+            foreach (Control c in root.Controls)
+            {
+                if (c is TextBox || c is ComboBox || c is NumericUpDown || c is CheckBox) return c;
+                Control f = FirstInput(c);
+                if (f != null) return f;
+            }
+            return null;
+        }
+
         void ListEditor(GCard card, string key, string addCaption, string emptyText)
         {
             ListInfo li = new ListInfo();
             li.Key = key; li.AddCaption = addCaption; li.EmptyText = emptyText;
             GRow row = NewRow(card.Ctx, false, null);
             li.Holder = row;
-            li.Add = new AeroButton();
+            li.Add = new UiButton();
             li.Add.Text = addCaption;
-            li.Add.Width = 260; li.Add.Height = 28;
+            li.Add.Width = 290; li.Add.Height = 34;
             string k = key;
             li.Add.Click += delegate { St.A(k).Add(NewItem(k)); RebuildList(k); Changed(); };
             row.Host.Controls.Add(li.Add);
-            li.Empty = MakeLabel(emptyText, hintFont, Color.DimGray, 0, 0, InnerW);
+            li.Empty = MakeLabel(emptyText, hintFont, Theme.Muted, 0, 0, 100);
             row.Host.Controls.Add(li.Empty);
             lists[key] = li;
             Reg(key, li.Add);
-            li.Add.Top = 0;
-            row.Host.Height = 30;
+            row.Fit = delegate(int w) { li.W = w; return LayoutList(li); };
+            LayoutList(li);
         }
 
         void RebuildLists() { foreach (string k in new List<string>(lists.Keys)) RebuildList(k); }
@@ -91,19 +104,26 @@ namespace WinInstaller
             LayoutList(li);
         }
 
-        void LayoutList(ListInfo li)
+        /// <summary>Раскладывает элементы списка под ширину li.W и возвращает высоту всего списка.</summary>
+        int LayoutList(ListInfo li)
         {
-            int y = 0;
+            int y = 0, w = li.W;
             li.Empty.Visible = li.Items.Count == 0 && li.EmptyText.Length > 0;
-            if (li.Empty.Visible) y = li.Empty.Height + 6;
+            if (li.Empty.Visible) { Wrap(li.Empty, w); li.Empty.Left = 0; li.Empty.Top = 0; y = li.Empty.Height + 8; }
             foreach (ItemView iv in li.Items)
             {
-                iv.Panel.Height = LayoutRows(iv.Ctx.Rows, iv.Ctx.InnerW, 10, 34) + 4;
-                iv.Panel.Top = y;
-                y += iv.Panel.Height + 8;
+                UiCard p = iv.Panel;
+                p.Width = w;
+                iv.Ctx.InnerW = w - 2 * p.Pad;
+                p.Height = LayoutRows(iv.Ctx.Rows, iv.Ctx.InnerW, p.Pad, p.BodyTop) + 8;
+                p.Left = 0; p.Top = y;
+                int bx = w - p.Pad;
+                foreach (Control b in iv.Hdr) { b.Left = bx - b.Width; b.Top = 10; bx -= b.Width + 6; }
+                y += p.Height + 10;
             }
-            li.Add.Top = y;
+            li.Add.Left = 0; li.Add.Top = y;
             li.Holder.Host.Height = y + li.Add.Height;
+            return li.Holder.Host.Height;
         }
 
         void RelayoutLists() { foreach (ListInfo li in lists.Values) LayoutList(li); }
@@ -122,34 +142,28 @@ namespace WinInstaller
         {
             string key = li.Key;
             ItemView iv = new ItemView();
-            Panel p = new Panel();
-            p.BackColor = Color.White;
-            p.Width = InnerW;
-            p.Paint += delegate(object s, PaintEventArgs e)
-            {
-                using (Pen pen = new Pen(Theme.C(213, 223, 229))) e.Graphics.DrawRectangle(pen, 0, 0, p.Width - 1, p.Height - 1);
-            };
+            UiCard p = new UiCard();
+            p.BackColor = Theme.Card2;
+            p.Pad = 14;
+            p.Text = (key == "users" ? "Пользователь " : key == "regs" ? "Параметр " : key == "cmds" ? "Команда " : "Задача ") + (index + 1);
+            p.Width = 600;
             iv.Panel = p;
-            iv.Ctx.Parent = p; iv.Ctx.InnerW = InnerW - 20; iv.Ctx.Track = false;
+            iv.Ctx.Parent = p; iv.Ctx.InnerW = p.Width - 2 * p.Pad; iv.Ctx.Track = false;
 
-            string title = key == "users" ? "Пользователь " : key == "regs" ? "Параметр " : key == "cmds" ? "Команда " : "Задача ";
-            Label hl = MakeLabel(title + (index + 1), boldFont, Theme.Ink, 10, 8, 300);
-            p.Controls.Add(hl);
-            int bx = InnerW - 10;
             Action<string, int, Action> hb = delegate(string cap, int w, Action act)
             {
-                AeroButton b = new AeroButton();
-                b.Text = cap; b.SetBounds(bx - w, 5, w, 24);
+                UiButton b = new UiButton();
+                b.Text = cap; b.Ghost = true; b.SetBounds(0, 10, w, 28);
                 b.Click += delegate { act(); };
                 p.Controls.Add(b);
-                bx -= w + 6;
+                iv.Hdr.Add(b);
             };
             int idx = index;
-            hb("Удалить", 70, delegate { St.A(key).RemoveAt(idx); RebuildList(key); Changed(); });
+            hb("Удалить", 84, delegate { St.A(key).RemoveAt(idx); RebuildList(key); Changed(); });
             if (key != "users")
             {
-                hb("Вниз", 56, delegate { MoveItem(key, idx, 1); });
-                hb("Вверх", 56, delegate { MoveItem(key, idx, -1); });
+                hb("Вниз", 64, delegate { MoveItem(key, idx, 1); });
+                hb("Вверх", 70, delegate { MoveItem(key, idx, -1); });
             }
 
             RowCtx x = iv.Ctx;
@@ -199,7 +213,7 @@ namespace WinInstaller
             }
             foreach (GRow r in x.Rows) if (r.Load != null) r.Load();
             // первое поле элемента - цель для перехода по предупреждению
-            foreach (Control c in x.Rows.Count > 0 ? x.Rows[0].Host.Controls : null) { if (c is TextBox || c is ComboBox || c is NumericUpDown || c is CheckBox) { iv.First = c; break; } }
+            iv.First = x.Rows.Count > 0 ? FirstInput(x.Rows[0].Host) : null;
             return iv;
         }
 
@@ -207,13 +221,11 @@ namespace WinInstaller
         {
             GRow r = NewRow(x, false, vis);
             List<CheckBox> cbs = new List<CheckBox>();
-            int w = x.InnerW / 7;
             for (int i = 0; i < Cat.Days.Count; i++)
             {
-                CheckBox cb = new CheckBox();
-                cb.AutoSize = false; cb.BackColor = Color.White;
+                UiCheck cb = new UiCheck();
+                cb.AutoSize = false;
                 cb.Text = Cat.Days[i][1];
-                cb.SetBounds(i * w, 0, w - 4, 22);
                 r.Host.Controls.Add(cb);
                 cbs.Add(cb);
                 cb.CheckedChanged += delegate
@@ -225,7 +237,12 @@ namespace WinInstaller
                     Changed();
                 };
             }
-            r.Host.Height = 24;
+            r.Fit = delegate(int w)
+            {
+                int per = Math.Max(1, Math.Min(7, w / 84)), cw = w / per;
+                for (int i = 0; i < cbs.Count; i++) cbs[i].SetBounds((i % per) * cw, (i / per) * 28, cw - 4, 24);
+                return ((cbs.Count + per - 1) / per) * 28;
+            };
             r.Load = delegate
             {
                 List<object> days = item.A("days") ?? new List<object>();
@@ -239,67 +256,71 @@ namespace WinInstaller
         ListBox warnBox;
         TextBox preview;
         Label warnHdr, xmlStatus;
-        AeroButton btnUseInstall, btnUseCapture, btnLauncher;
+        UiButton btnUseInstall, btnUseCapture, btnLauncher;
 
         void PageResult()
         {
             GPage p = AddPage("result", "Результат", "check");
             p.AutoScroll = false;
+            p.Padding = new Padding(GPage.PageMargin, 20, GPage.PageMargin, 20);
 
             preview = new TextBox();
             preview.Multiline = true; preview.ReadOnly = true; preview.WordWrap = false;
             preview.ScrollBars = ScrollBars.Both;
-            preview.Font = new Font("Consolas", 9f);
-            preview.BackColor = Color.White;
-            preview.Dock = DockStyle.Fill;
-            p.Controls.Add(preview);
+            preview.Font = new Font("Consolas", 9.5f);
+            FieldBox previewBox = FieldBox.Wrap(preview);
+            previewBox.Dock = DockStyle.Fill;
+            preview.BackColor = Theme.Field;
+            p.Controls.Add(previewBox);
 
             xmlStatus = new Label();
-            xmlStatus.Dock = DockStyle.Top; xmlStatus.Height = 22; xmlStatus.Padding = new Padding(8, 3, 0, 0);
-            xmlStatus.BackColor = Color.White;
+            xmlStatus.Dock = DockStyle.Top; xmlStatus.Height = 30; xmlStatus.TextAlign = ContentAlignment.MiddleLeft;
             p.Controls.Add(xmlStatus);
 
             FlowLayoutPanel bar = new FlowLayoutPanel();
-            bar.Dock = DockStyle.Top; bar.Height = 74; bar.Padding = new Padding(8, 6, 0, 0);
-            bar.BackColor = Color.White;
+            bar.Dock = DockStyle.Top; bar.Height = 54; bar.AutoSize = true; bar.AutoSizeMode = AutoSizeMode.GrowAndShrink; bar.MinimumSize = new Size(0, 46); bar.Padding = new Padding(0, 4, 0, 0);
+            bar.BackColor = Theme.Bg;
             Action<string, int, Action> mk = delegate(string cap, int w, Action act)
             {
-                AeroButton b = new AeroButton();
-                b.Text = cap; b.Size = new Size(w, 28); b.Margin = new Padding(0, 0, 8, 6);
+                UiButton b = new UiButton();
+                b.Text = cap; b.Size = new Size(w, 36); b.Margin = new Padding(0, 0, 10, 8);
                 b.Click += delegate { act(); };
                 bar.Controls.Add(b);
             };
-            mk("Сохранить XML…", 140, SaveXmlDialog);
-            mk("Копировать XML", 130, CopyXml);
-            mk("Сохранить комплект…", 160, SaveBundleDialog);
-            btnLauncher = new AeroButton(); btnLauncher.Text = "Start-Sysprep.cmd…"; btnLauncher.Size = new Size(150, 28); btnLauncher.Margin = new Padding(0, 0, 8, 6);
+            mk("Сохранить XML…", 150, SaveXmlDialog);
+            mk("Копировать XML", 150, CopyXml);
+            mk("Сохранить комплект…", 180, SaveBundleDialog);
+            btnLauncher = new UiButton(); btnLauncher.Text = "Start-Sysprep.cmd…"; btnLauncher.Size = new Size(170, 36); btnLauncher.Margin = new Padding(0, 0, 10, 8);
             btnLauncher.Click += delegate { SaveLauncherDialog(); };
             bar.Controls.Add(btnLauncher);
-            btnUseInstall = new AeroButton(); btnUseInstall.Text = "Использовать для установки"; btnUseInstall.Size = new Size(220, 28); btnUseInstall.Primary = true; btnUseInstall.Margin = new Padding(0, 0, 8, 6);
+            btnUseInstall = new UiButton(); btnUseInstall.Text = "Использовать для установки"; btnUseInstall.Size = new Size(240, 36); btnUseInstall.Primary = true; btnUseInstall.Margin = new Padding(0, 0, 10, 8);
             btnUseInstall.Click += delegate { UseForInstall(false); };
             bar.Controls.Add(btnUseInstall);
-            btnUseCapture = new AeroButton(); btnUseCapture.Text = "Использовать для захвата образа"; btnUseCapture.Size = new Size(240, 28); btnUseCapture.Primary = true; btnUseCapture.Margin = new Padding(0, 0, 8, 6);
+            btnUseCapture = new UiButton(); btnUseCapture.Text = "Использовать для захвата образа"; btnUseCapture.Size = new Size(270, 36); btnUseCapture.Primary = true; btnUseCapture.Margin = new Padding(0, 0, 10, 8);
             btnUseCapture.Click += delegate { UseForInstall(true); };
             bar.Controls.Add(btnUseCapture);
             p.Controls.Add(bar);
 
             warnBox = new ListBox();
-            warnBox.Dock = DockStyle.Top; warnBox.Height = 130;
+            warnBox.Dock = DockStyle.Top; warnBox.Height = 140;
             warnBox.DrawMode = DrawMode.OwnerDrawVariable;
-            warnBox.BorderStyle = BorderStyle.FixedSingle;
+            warnBox.BorderStyle = BorderStyle.None;
+            warnBox.BackColor = Theme.Card;
             warnBox.IntegralHeight = false;
+            Dark.Scroll(warnBox);
             warnBox.MeasureItem += delegate(object s, MeasureItemEventArgs e)
             {
                 Warn w = warnBox.Items[e.Index] as Warn;
-                e.ItemHeight = TextH("• " + (w == null ? "" : w.Text), warnBox.Font, warnBox.ClientSize.Width - 24) + 6;
+                e.ItemHeight = TextH("• " + (w == null ? "" : w.Text), warnBox.Font, warnBox.ClientSize.Width - 28) + 10;
             };
             warnBox.DrawItem += delegate(object s, DrawItemEventArgs e)
             {
                 if (e.Index < 0) return;
                 Warn w = (Warn)warnBox.Items[e.Index];
-                e.DrawBackground();
-                Color c = w.Tab != null ? Color.FromArgb(0, 70, 140) : Color.Black;
-                TextRenderer.DrawText(e.Graphics, "• " + w.Text, warnBox.Font, new Rectangle(e.Bounds.X + 4, e.Bounds.Y + 2, e.Bounds.Width - 8, e.Bounds.Height - 2), c, TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
+                bool sel = (e.State & DrawItemState.Selected) != 0;
+                using (SolidBrush b = new SolidBrush(sel ? Theme.AccentSoft : Theme.Card)) e.Graphics.FillRectangle(b, e.Bounds);
+                Color c = w.Tab != null ? Theme.AccentHi : Theme.Text;
+                TextRenderer.DrawText(e.Graphics, "• " + w.Text, warnBox.Font, new Rectangle(e.Bounds.X + 12, e.Bounds.Y + 4, e.Bounds.Width - 24, e.Bounds.Height - 4), c, TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
             };
             warnBox.MouseClick += delegate(object s, MouseEventArgs e)
             {
@@ -311,10 +332,15 @@ namespace WinInstaller
             p.Controls.Add(warnBox);
 
             warnHdr = new Label();
-            warnHdr.Dock = DockStyle.Top; warnHdr.Height = 24; warnHdr.Padding = new Padding(8, 5, 0, 0);
-            warnHdr.Font = boldFont; warnHdr.ForeColor = Theme.Ink; warnHdr.BackColor = Color.White;
+            warnHdr.Dock = DockStyle.Top; warnHdr.Height = 34; warnHdr.TextAlign = ContentAlignment.MiddleLeft;
+            warnHdr.Font = boldFont; warnHdr.ForeColor = Theme.Text;
             p.Controls.Add(warnHdr);
-            preview.BringToFront();
+
+            Label title = new Label();
+            title.Text = "Результат"; title.Font = Theme.H1; title.ForeColor = Theme.Text;
+            title.Dock = DockStyle.Top; title.Height = 50; title.TextAlign = ContentAlignment.TopLeft;
+            p.Controls.Add(title);
+            previewBox.BringToFront();
         }
 
         void ShowResult()
@@ -322,6 +348,7 @@ namespace WinInstaller
             if (last == null) last = Generator.Generate(St);
             int n = last.Warnings.Count;
             warnHdr.Text = n == 0 ? "Предупреждений нет" : "Предупреждения (" + n + ") — щёлкните, чтобы перейти к нужному полю";
+            warnHdr.ForeColor = n == 0 ? Theme.Ok : Theme.Warn;
             warnBox.BeginUpdate();
             warnBox.Items.Clear();
             foreach (Warn w in last.Warnings) warnBox.Items.Add(w);
@@ -332,7 +359,7 @@ namespace WinInstaller
             bool ok = true; string err = "";
             try { XmlDocument d = new XmlDocument(); d.LoadXml(last.Xml); }
             catch (Exception ex) { ok = false; err = ex.Message; }
-            xmlStatus.ForeColor = ok ? Color.DarkGreen : Color.Firebrick;
+            xmlStatus.ForeColor = ok ? Theme.Ok : Theme.Danger;
             xmlStatus.Text = ok ? "XML корректен · " + (Encoding.UTF8.GetByteCount(last.Xml) / 1024.0).ToString("0.0") + " КБ · " + (last.IsSys ? "unattend.xml" : "autounattend.xml")
                                 : "XML содержит ошибки: " + err;
             btnLauncher.Visible = last.IsSys;

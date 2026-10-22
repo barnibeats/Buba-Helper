@@ -1,6 +1,7 @@
-// Редактор файла ответов (вкладка «Файл ответов» программы): левое меню шагов и страницы настроек.
+// Редактор файла ответов (вкладка «Файл ответов» программы): левое меню страниц и страницы настроек.
 // Здесь каркас: строки формы, карточки, страницы, привязка полей к состоянию, пересчёт XML.
 // Сами страницы - в GenEditor.Pages.cs, списки (пользователи, команды…) и результат - в GenEditor.Lists.cs.
+// Раскладка адаптивная: карточки тянутся по ширине окна (до разумного предела), строки пересчитывают размеры через GRow.Fit.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -37,6 +38,8 @@ namespace WinInstaller
         public object Tag;
         public string Search = "";
         public ComboBox Combo;
+        public Func<int, int> Fit;      // раскладывает содержимое под ширину w и возвращает высоту строки
+        public int FitW = -1;           // ширина, под которую Fit выполнялся в последний раз
         public bool Shown { get { return !Filtered && (VisibleIf == null || VisibleIf()); } }
     }
 
@@ -47,42 +50,79 @@ namespace WinInstaller
         public List<GRow> Rows = new List<GRow>();
         public int InnerW;
         public bool Track = true;   // строки попадают в общий список для загрузки состояния в поля
-        public int RowW(bool half) { return half ? (InnerW - 12) / 2 : InnerW; }
     }
 
-    class GCard : AeroGroupBox
+    class GCard : UiCard
     {
         public RowCtx Ctx = new RowCtx();
         public Func<bool> VisibleIf;
         public bool Shown { get { return VisibleIf == null || VisibleIf(); } }
         public bool AnyRow() { foreach (GRow r in Ctx.Rows) if (r.Shown) return true; return false; }
-        public void DoLayout() { Height = GenEditor.LayoutRows(Ctx.Rows, Ctx.InnerW, 12, 24) + 4; }
+        public void DoLayout()
+        {
+            Ctx.InnerW = Width - 2 * Pad;
+            Height = GenEditor.LayoutRows(Ctx.Rows, Ctx.InnerW, Pad, BodyTop) + 18;
+        }
     }
 
-    class GPage : Panel
+    class GPage : DPanel
     {
         public string Id, Title, Icon;
         public List<GCard> Cards = new List<GCard>();
+        public const int PageMargin = 28, MaxW = 940;
+        readonly Label head = new Label();
+        bool busy;
 
         public GPage()
         {
-            AutoScroll = true;
-            BackColor = Color.White;
+            Ui.VerticalOnly(this);
+            BackColor = Theme.Bg;
+            ForeColor = Theme.Text;
+            head.Font = Theme.H1; head.ForeColor = Theme.Text; head.AutoSize = false; head.Visible = false;
+            Controls.Add(head);
+            Dark.Scroll(this);
+            SizeChanged += delegate { if (Visible) Relayout(); };
         }
+
         public void Relayout()
         {
-            if (Cards.Count == 0) return;
-            int y = 8;
+            if (Cards.Count == 0 || busy) return;
+            busy = true;
+            try
+            {
+                // ширину считаем от внешней ширины страницы и заранее учитываем вертикальную полосу прокрутки:
+                // так карточки никогда не выходят за видимую область и горизонтальная полоса не появляется
+                bool vs = VerticalScroll.Visible;
+                int total = Place(vs);
+                bool need = total > Height;
+                if (need != vs) Place(need);
+            }
+            finally { busy = false; }
+        }
+
+        /// <summary>Расставляет карточки и возвращает высоту содержимого.</summary>
+        int Place(bool vscroll)
+        {
+            int oy = AutoScrollPosition.Y;   // <= 0: текущее смещение прокрутки; позиции задаём с его учётом, поэтому страница не «прыгает» наверх
+            int avail = Math.Max(320, Width - (vscroll ? SystemInformation.VerticalScrollBarWidth : 0) - 2 * PageMargin);
+            int cw = Math.Min(avail, MaxW);
+            int left = PageMargin + (avail - cw) / 2;
+            head.Text = Title;
+            head.SetBounds(left, 22 + oy, cw, 38);
+            head.Visible = true;
+            int y = 76;
             foreach (GCard c in Cards)
             {
                 bool show = c.Shown && c.AnyRow();
                 c.Visible = show;
                 if (!show) continue;
+                c.Width = cw;
                 c.DoLayout();
-                c.Left = 8; c.Top = y;
-                y += c.Height + 8;
+                c.Left = left; c.Top = y + oy;
+                y += c.Height + 14;
             }
-            AutoScrollMinSize = new Size(0, y);
+            AutoScrollMinSize = new Size(0, y + 10);
+            return y + 10;
         }
     }
 
@@ -91,20 +131,20 @@ namespace WinInstaller
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, string l);
 
-        public const int NavW = 196, CardW = 664, InnerW = 640;
+        public const int NavW = 232;
         public JObj St = GenState.Defaults();
         public event Action IndexChanged, Regenerated;
         public event Action<string, bool> UseXml;     // путь к сохранённому XML, это файл для Sysprep?
         public string StatePath;
 
         bool loading;
-        readonly AeroNav nav = new AeroNav();
+        readonly NavList nav = new NavList();
         readonly List<GPage> pages = new List<GPage>();
         readonly List<GRow> allRows = new List<GRow>();
         readonly Dictionary<string, Control> targets = new Dictionary<string, Control>();
         readonly List<Action> refreshers = new List<Action>();
         readonly Timer regen = new Timer();
-        Font hintFont, boldFont;
+        Font hintFont = Theme.Small, boldFont = Theme.Semi;
         GenResult last;
 
         public int Index { get { return nav.SelectedIndex; } }
@@ -113,27 +153,19 @@ namespace WinInstaller
 
         public GenEditor()
         {
-            BackColor = Color.White;
-            hintFont = new Font("Segoe UI", 8.25f);
-            boldFont = new Font("Segoe UI", 9f, FontStyle.Bold);
+            BackColor = Theme.Bg;
+            ForeColor = Theme.Text;
+            Font = Theme.UI;
             nav.Dock = DockStyle.Left;
             nav.Width = NavW;
             Controls.Add(nav);
             regen.Interval = 350;
             regen.Tick += delegate { regen.Stop(); Regenerate(); };
             BuildPages();
-            nav.Icons = Icons.List(IconNames());
-            foreach (GPage p in pages) nav.Items.Add(p.Title);
+            foreach (GPage p in pages) nav.Add(p.Title, p.Icon);
             nav.SelectedIndexChanged += delegate { ShowPage(nav.SelectedIndex); };
             LoadAll();
             nav.SelectedIndex = 0;
-        }
-
-        string[] IconNames()
-        {
-            List<string> n = new List<string>();
-            foreach (GPage p in pages) n.Add(p.Icon);
-            return n.ToArray();
         }
 
         // ------------------------------------------------------------ страницы и навигация
@@ -145,7 +177,7 @@ namespace WinInstaller
             p.Dock = DockStyle.Fill;
             p.Visible = false;
             Controls.Add(p);
-            p.BringToFront();
+            p.BringToFront();   // заполняющая страница «докуется» после бокового меню
             pages.Add(p);
             return p;
         }
@@ -154,9 +186,8 @@ namespace WinInstaller
         {
             GCard c = new GCard();
             c.Text = title; c.VisibleIf = vis;
-            c.Width = CardW;
-            c.BackColor = Color.White;
-            c.Ctx.Parent = c; c.Ctx.InnerW = InnerW;
+            c.Width = 700;
+            c.Ctx.Parent = c; c.Ctx.InnerW = c.Width - 2 * c.Pad;
             p.Controls.Add(c);
             p.Cards.Add(c);
             return c;
@@ -194,7 +225,7 @@ namespace WinInstaller
 
         public static int LayoutRows(List<GRow> rows, int innerW, int x0, int y0)
         {
-            int y = y0, halfW = (innerW - 12) / 2;
+            int y = y0, halfW = (innerW - 14) / 2, gap = 10;
             GRow left = null;
             foreach (GRow r in rows)
             {
@@ -203,24 +234,27 @@ namespace WinInstaller
                 r.WasVisible = show;
                 if (r.Host.Visible != show) r.Host.Visible = show;
                 if (!show) continue;
+                int w = r.Half ? halfW : innerW;
+                if (r.Host.Width != w) r.Host.Width = w;
+                if (r.Fit != null && r.FitW != w) { r.FitW = w; r.Host.Height = r.Fit(w); }
                 if (r.Half)
                 {
                     if (left == null) { r.Host.Left = x0; r.Host.Top = y; left = r; }
                     else
                     {
-                        r.Host.Left = x0 + halfW + 12; r.Host.Top = y;
-                        y += Math.Max(left.Host.Height, r.Host.Height) + 6;
+                        r.Host.Left = x0 + halfW + 14; r.Host.Top = y;
+                        y += Math.Max(left.Host.Height, r.Host.Height) + gap;
                         left = null;
                     }
                 }
                 else
                 {
-                    if (left != null) { y += left.Host.Height + 6; left = null; }
+                    if (left != null) { y += left.Host.Height + gap; left = null; }
                     r.Host.Left = x0; r.Host.Top = y;
-                    y += r.Host.Height + 6;
+                    y += r.Host.Height + gap;
                 }
             }
-            if (left != null) y += left.Host.Height + 6;
+            if (left != null) y += left.Host.Height + gap;
             return y;
         }
 
@@ -341,13 +375,7 @@ namespace WinInstaller
             last = Generator.Generate(St);
             int n = last.Warnings.Count;
             int ri = pages.Count - 1;
-            string title = pages[ri].Title + (n > 0 ? " (" + n + ")" : "");
-            if (ri < nav.Items.Count && Convert.ToString(nav.Items[ri]) != title)
-            {
-                int sel = nav.SelectedIndex;
-                nav.Items[ri] = title;
-                if (nav.SelectedIndex != sel) nav.SelectedIndex = sel;
-            }
+            nav.SetBadge(ri, n, Theme.Warn);
             if (Index == ri) ShowResult();
             SaveState();
             if (Regenerated != null) Regenerated();
@@ -358,9 +386,8 @@ namespace WinInstaller
         GRow NewRow(RowCtx x, bool half, Func<bool> vis)
         {
             GRow r = new GRow();
-            r.Host = new Panel();
-            r.Host.BackColor = Color.White;
-            r.Host.Width = x.RowW(half);
+            r.Host = new DPanel();
+            r.Host.Width = Math.Max(100, half ? (x.InnerW - 14) / 2 : x.InnerW);
             r.Half = half; r.VisibleIf = vis;
             x.Parent.Controls.Add(r.Host);
             x.Rows.Add(r);
@@ -378,33 +405,55 @@ namespace WinInstaller
         {
             Label l = new Label();
             l.AutoSize = false;
-            l.Text = text; l.Font = f; l.ForeColor = color; l.BackColor = Color.White;
+            l.Text = text; l.Font = f; l.ForeColor = color;
             l.SetBounds(x, y, w, TextH(text, f, w) + 2);
             return l;
         }
 
+        /// <summary>Подгоняет высоту подписи под ширину w.</summary>
+        static void Wrap(Label l, int w)
+        {
+            l.Width = w;
+            l.Height = TextH(l.Text, l.Font, w) + 2;
+        }
+
         void Reg(string key, Control c) { if (!string.IsNullOrEmpty(key)) targets[key] = c; }
 
-        /// <summary>Добавляет подсказку под полем и возвращает новую высоту строки.</summary>
-        int AddHint(GRow r, string hint, int y, int x, int w)
+        /// <summary>Подсказка под полем (добавляется в строку; null, если подсказки нет).</summary>
+        Label MakeHint(GRow r, string hint)
         {
-            if (string.IsNullOrEmpty(hint)) return y;
-            Label h = MakeLabel(hint, hintFont, Color.DimGray, x, y + 2, w);
+            if (string.IsNullOrEmpty(hint)) return null;
+            Label h = MakeLabel(hint, hintFont, Theme.Muted, 0, 0, 100);
             r.Host.Controls.Add(h);
+            return h;
+        }
+
+        /// <summary>Ставит подсказку под y (если она есть) и возвращает новую нижнюю границу.</summary>
+        static int PlaceHint(Label h, int y, int x, int w)
+        {
+            if (h == null) return y;
+            Wrap(h, w);
+            h.Left = x; h.Top = y + 4;
             return h.Bottom;
         }
 
         GRow Txt(RowCtx x, Bind b, string label, string hint = null, bool half = false, Func<bool> vis = null, string ph = null, int lines = 1)
         {
             GRow r = NewRow(x, half, vis);
-            int w = x.RowW(half);
-            Label l = MakeLabel(label, Font, Color.Black, 0, 0, w);
+            Label l = MakeLabel(label, Font, Theme.Text, 0, 0, 100);
             TextBox tb = new TextBox();
-            tb.SetBounds(0, l.Bottom + 1, w, lines > 1 ? lines * 16 + 8 : 23);
-            if (lines > 1) { tb.Multiline = true; tb.ScrollBars = ScrollBars.Vertical; tb.AcceptsReturn = true; tb.Font = new Font("Consolas", 9f); }
+            if (lines > 1) { tb.Multiline = true; tb.ScrollBars = ScrollBars.Vertical; tb.AcceptsReturn = true; tb.Font = new Font("Consolas", 9.5f); }
+            FieldBox fb = FieldBox.Wrap(tb);
             if (ph != null) tb.HandleCreated += delegate { SendMessage(tb.Handle, 0x1501, new IntPtr(1), ph); };   // EM_SETCUEBANNER
-            r.Host.Controls.Add(l); r.Host.Controls.Add(tb);
-            r.Host.Height = AddHint(r, hint, tb.Bottom, 0, w);
+            r.Host.Controls.Add(l); r.Host.Controls.Add(fb);
+            Label hl = MakeHint(r, hint);
+            int fh = lines > 1 ? lines * 17 + 20 : 32;
+            r.Fit = delegate(int w)
+            {
+                Wrap(l, w);
+                fb.SetBounds(0, l.Bottom + 5, w, fh);
+                return PlaceHint(hl, fb.Bottom, 0, w);
+            };
             r.Search = label + " " + hint;
             r.Load = delegate
             {
@@ -425,13 +474,18 @@ namespace WinInstaller
         GRow Num(RowCtx x, Bind b, string label, int min, int max, string hint = null, bool half = false, Func<bool> vis = null)
         {
             GRow r = NewRow(x, half, vis);
-            int w = x.RowW(half);
-            Label l = MakeLabel(label, Font, Color.Black, 0, 0, w);
+            Label l = MakeLabel(label, Font, Theme.Text, 0, 0, 100);
             NumericUpDown nud = new NumericUpDown();
             nud.Minimum = min; nud.Maximum = max;
-            nud.SetBounds(0, l.Bottom + 1, Math.Min(w, 140), 23);
-            r.Host.Controls.Add(l); r.Host.Controls.Add(nud);
-            r.Host.Height = AddHint(r, hint, nud.Bottom, 0, w);
+            FieldBox fb = FieldBox.Wrap(nud);
+            r.Host.Controls.Add(l); r.Host.Controls.Add(fb);
+            Label hl = MakeHint(r, hint);
+            r.Fit = delegate(int w)
+            {
+                Wrap(l, w);
+                fb.SetBounds(0, l.Bottom + 5, Math.Min(w, 180), 32);
+                return PlaceHint(hl, fb.Bottom, 0, w);
+            };
             r.Search = label + " " + hint;
             r.Load = delegate
             {
@@ -451,14 +505,17 @@ namespace WinInstaller
         GRow Sel(RowCtx x, Bind b, string label, List<Opt> opts, string hint = null, bool half = false, Func<bool> vis = null)
         {
             GRow r = NewRow(x, half, vis);
-            int w = x.RowW(half);
-            Label l = MakeLabel(label, Font, Color.Black, 0, 0, w);
-            ComboBox cb = new ComboBox();
-            cb.DropDownStyle = ComboBoxStyle.DropDownList;
-            cb.SetBounds(0, l.Bottom + 1, w, 24);
+            Label l = MakeLabel(label, Font, Theme.Text, 0, 0, 100);
+            UiCombo cb = new UiCombo();
             foreach (Opt o in opts) cb.Items.Add(o);
             r.Host.Controls.Add(l); r.Host.Controls.Add(cb);
-            r.Host.Height = AddHint(r, hint, cb.Bottom, 0, w);
+            Label hl = MakeHint(r, hint);
+            r.Fit = delegate(int w)
+            {
+                Wrap(l, w);
+                cb.SetBounds(0, l.Bottom + 5, w, cb.Height);
+                return PlaceHint(hl, cb.Bottom, 0, w);
+            };
             r.Search = label + " " + hint;
             r.Combo = cb;
             r.Load = delegate
@@ -496,23 +553,25 @@ namespace WinInstaller
         GRow Chk(RowCtx x, Bind b, string label, string hint = null, bool half = false, Func<bool> vis = null, string warn = null, string tags = null, string search = null)
         {
             GRow r = NewRow(x, half, vis);
-            int w = x.RowW(half);
             string text = label + (tags ?? "");
-            CheckBox cb = new CheckBox();
+            UiCheck cb = new UiCheck();
             cb.AutoSize = false;
             cb.Text = text;
-            cb.BackColor = Color.White;
-            cb.SetBounds(0, 0, w, TextH(text, Font, w - 22) + 6);
             r.Host.Controls.Add(cb);
-            int y = cb.Bottom;
-            y = AddHint(r, hint, y - 2, 20, w - 20);
+            Label hl = MakeHint(r, hint);
+            Label wl = null;
             if (!string.IsNullOrEmpty(warn))
             {
-                Label wl = MakeLabel("⚠ " + warn, hintFont, Color.Firebrick, 20, y + 2, w - 20);
+                wl = MakeLabel("⚠ " + warn, hintFont, Theme.Warn, 28, 0, 100);
                 r.Host.Controls.Add(wl);
-                y = wl.Bottom;
             }
-            r.Host.Height = y;
+            r.Fit = delegate(int w)
+            {
+                cb.SetBounds(0, 0, w, Math.Max(24, TextH(text, Font, w - 28) + 6));
+                int y = PlaceHint(hl, cb.Bottom - 2, 28, w - 28);
+                if (wl != null) { Wrap(wl, w - 28); wl.Left = 28; wl.Top = y + 3; y = wl.Bottom; }
+                return y;
+            };
             r.Search = (search ?? label) + " " + hint + " " + warn;
             r.Load = delegate { bool v = b.T().B(b.Key); if (cb.Checked != v) cb.Checked = v; };
             cb.CheckedChanged += delegate
@@ -528,33 +587,42 @@ namespace WinInstaller
         GRow Note(RowCtx x, string text, Func<bool> vis = null)
         {
             GRow r = NewRow(x, false, vis);
-            Label l = MakeLabel(text, hintFont, Color.DimGray, 0, 0, x.RowW(false));
+            Label l = MakeLabel(text, hintFont, Theme.Muted, 0, 0, 100);
             r.Host.Controls.Add(l);
-            r.Host.Height = l.Height;
+            r.Fit = delegate(int w) { Wrap(l, w); return l.Height; };
             return r;
         }
 
         GRow Alert(RowCtx x, string text, Func<bool> vis = null)
         {
             GRow r = NewRow(x, false, vis);
-            int w = x.RowW(false);
-            Label l = MakeLabel(text, hintFont, Color.FromArgb(120, 40, 20), 6, 5, w - 12);
-            l.BackColor = Color.FromArgb(255, 244, 229);
-            Panel box = new Panel();
-            box.BackColor = Color.FromArgb(255, 244, 229);
-            box.SetBounds(0, 0, w, l.Height + 10);
+            Color bg = Theme.C(45, 37, 20);
+            DPanel box = new DPanel();
+            box.BackColor = bg;
+            box.Paint += delegate(object s, PaintEventArgs e)
+            {
+                Theme.Smooth(e.Graphics);
+                using (SolidBrush br = new SolidBrush(Theme.Warn)) e.Graphics.FillRectangle(br, 0, 0, 3, box.Height);
+            };
+            Label l = MakeLabel(text, hintFont, Theme.C(238, 205, 140), 16, 10, 100);
+            l.BackColor = bg;
             box.Controls.Add(l);
             r.Host.Controls.Add(box);
-            r.Host.Height = box.Height;
+            r.Fit = delegate(int w)
+            {
+                Wrap(l, w - 32); l.Left = 16; l.Top = 10;
+                box.SetBounds(0, 0, w, l.Height + 20);
+                return box.Height;
+            };
             return r;
         }
 
         GRow Sub(RowCtx x, string text, Func<bool> vis = null)
         {
             GRow r = NewRow(x, false, vis);
-            Label l = MakeLabel(text, boldFont, Theme.Ink, 0, 2, x.RowW(false));
+            Label l = MakeLabel(text, boldFont, Theme.AccentHi, 0, 6, 100);
             r.Host.Controls.Add(l);
-            r.Host.Height = l.Height + 4;
+            r.Fit = delegate(int w) { Wrap(l, w); l.Top = 6; return l.Height + 8; };
             return r;
         }
 
@@ -564,13 +632,13 @@ namespace WinInstaller
             for (int i = 0; i < caps.Length; i++)
             {
                 Action act = acts[i];
-                AeroButton bt = new AeroButton();
+                UiButton bt = new UiButton();
                 bt.Text = caps[i];
-                bt.SetBounds(i * (bw + 8), 0, bw, 28);
+                bt.SetBounds(i * (bw + 8), 0, bw, 34);
                 bt.Click += delegate { act(); };
                 r.Host.Controls.Add(bt);
             }
-            r.Host.Height = 28;
+            r.Host.Height = 34;
             return r;
         }
     }

@@ -63,14 +63,12 @@ namespace WinInstaller
         GRow KbdRow(RowCtx x)
         {
             GRow r = NewRow(x, false, null);
-            int cols = 3, colW = x.InnerW / cols;
             List<CheckBox> cbs = new List<CheckBox>();
             for (int i = 0; i < Cat.Kbds.Count; i++)
             {
-                CheckBox cb = new CheckBox();
-                cb.AutoSize = false; cb.BackColor = Color.White;
+                UiCheck cb = new UiCheck();
+                cb.AutoSize = false;
                 cb.Text = Cat.Kbds[i][1];
-                cb.SetBounds((i % cols) * colW, (i / cols) * 24, colW - 4, 22);
                 r.Host.Controls.Add(cb);
                 cbs.Add(cb);
                 cb.CheckedChanged += delegate
@@ -82,7 +80,12 @@ namespace WinInstaller
                     Changed();
                 };
             }
-            r.Host.Height = ((Cat.Kbds.Count + cols - 1) / cols) * 24;
+            r.Fit = delegate(int w)
+            {
+                int cols = Math.Max(1, Math.Min(3, w / 230)), colW = w / cols;
+                for (int i = 0; i < cbs.Count; i++) cbs[i].SetBounds((i % cols) * colW, (i / cols) * 28, colW - 6, 24);
+                return ((cbs.Count + cols - 1) / cols) * 28;
+            };
             r.Load = delegate
             {
                 List<object> kbd = St.O("locale").A("kbd") ?? new List<object>();
@@ -283,13 +286,15 @@ namespace WinInstaller
         GRow AutoUserRow(RowCtx x, Func<bool> vis)
         {
             GRow r = NewRow(x, true, vis);
-            int w = x.RowW(true);
-            Label l = MakeLabel("Пользователь", Font, Color.Black, 0, 0, w);
-            ComboBox cb = new ComboBox();
-            cb.DropDownStyle = ComboBoxStyle.DropDownList;
-            cb.SetBounds(0, l.Bottom + 1, w, 24);
+            Label l = MakeLabel("Пользователь", Font, Theme.Text, 0, 0, 100);
+            UiCombo cb = new UiCombo();
             r.Host.Controls.Add(l); r.Host.Controls.Add(cb);
-            r.Host.Height = cb.Bottom;
+            r.Fit = delegate(int w)
+            {
+                Wrap(l, w);
+                cb.SetBounds(0, l.Bottom + 5, w, cb.Height);
+                return cb.Bottom;
+            };
             r.Combo = cb;
             Action fill = delegate
             {
@@ -342,15 +347,19 @@ namespace WinInstaller
             GCard bar = AddCard(p, "Поиск", null);
             GRow sr = NewRow(bar.Ctx, false, null);
             TextBox tb = new TextBox();
-            tb.SetBounds(0, 0, 400, 23);
+            FieldBox tbBox = FieldBox.Wrap(tb);
             tb.HandleCreated += delegate { SendMessage(tb.Handle, 0x1501, new IntPtr(1), "Поиск по настройкам…"); };
-            ComboBox fc = new ComboBox();
-            fc.DropDownStyle = ComboBoxStyle.DropDownList;
-            fc.SetBounds(412, 0, 220, 24);
+            UiCombo fc = new UiCombo();
             fc.Items.Add(new Opt("all", "Все")); fc.Items.Add(new Opt("rec", "Рекомендуемые")); fc.Items.Add(new Opt("risk", "Рискованные")); fc.Items.Add(new Opt("on", "Только включённые"));
             fc.SelectedIndex = 0;
-            sr.Host.Controls.Add(tb); sr.Host.Controls.Add(fc);
-            sr.Host.Height = 26;
+            sr.Host.Controls.Add(tbBox); sr.Host.Controls.Add(fc);
+            sr.Fit = delegate(int w)
+            {
+                int fw = Math.Min(230, w / 3);
+                tbBox.SetBounds(0, 0, w - fw - 10, 32);
+                fc.SetBounds(w - fw, 0, fw, fc.Height);
+                return 34;
+            };
             tb.TextChanged += delegate { twSearch = tb.Text; ApplyTweakFilter(); };
             fc.SelectedIndexChanged += delegate { twMode = ((Opt)fc.SelectedItem).Value; ApplyTweakFilter(); };
 

@@ -29,7 +29,7 @@ namespace WinInstaller
             TextBox tb = c as TextBox;
             if (tb != null) return !tb.ReadOnly;
             if (c is CheckBox) return true;
-            AeroButton b = c as AeroButton;
+            UiButton b = c as UiButton;
             if (b != null)
             {
                 string t = b.Text;
@@ -58,7 +58,7 @@ namespace WinInstaller
                     ComboBox cb = c as ComboBox;
                     TextBox tb = c as TextBox;
                     CheckBox chk = c as CheckBox;
-                    AeroButton btn = c as AeroButton;
+                    UiButton btn = c as UiButton;
                     if (nud != null)
                     {
                         int k = rnd.Next(4);

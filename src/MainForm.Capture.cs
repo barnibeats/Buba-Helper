@@ -36,61 +36,56 @@ namespace WinInstaller
 
         void BuildCaptureUi()
         {
-            TabPage cpVol = AddPage(tabCapture, "1. Раздел", 0);
-            TabPage cpFile = AddPage(tabCapture, "2. Файл образа", 1);
-            TabPage cpRun = AddPage(tabCapture, "3. XML и запуск", 2);
-            GroupBox c1 = Add(cpVol, new AeroGroupBox(), 8, 8, 876, 226);
-            c1.Text = "1. Windows-раздел для захвата (система уже должна быть обобщена: sysprep /generalize)";
-            c1.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            lvVols = Add(c1, new ListView(), 12, 24, 852, 150);
-            lvVols.View = View.Details; lvVols.FullRowSelect = true; lvVols.MultiSelect = false; lvVols.HideSelection = false; lvVols.GridLines = true;
-            lvVols.Columns.Add("Раздел", 62);
-            lvVols.Columns.Add("Диск", 50);
-            lvVols.Columns.Add("Метка", 140);
-            lvVols.Columns.Add("Размер", 85);
-            lvVols.Columns.Add("Занято", 85);
-            lvVols.Columns.Add("Состояние sysprep", 400);
-            lvVols.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            btnVolRefresh = Add(c1, new AeroButton { Text = "Обновить" }, 12, 182, 100, 28);
-            lblVolHint = Add(c1, new Label(), 124, 182, 740, 36);
-            lblVolHint.ForeColor = Color.DimGray;
-            lblVolHint.Text = "Показаны установленные Windows (кроме той, из которой запущена программа). Sysprep выполняется в самой Windows (D.cmd), захват - отсюда, из WinPE.";
+            TabPage cpVol = AddPage(tabCapture, "Раздел");
+            TabPage cpFile = AddPage(tabCapture, "Файл образа");
+            TabPage cpRun = AddPage(tabCapture, "XML и запуск");
 
-            GroupBox c2 = Add(cpFile, new AeroGroupBox(), 8, 8, 876, 176);
-            c2.Text = "2. Файл образа"; c2.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            Add(c2, new Label { Text = "Сохранить в:" }, 12, 32, 120, 22);
-            txtOut = Add(c2, new TextBox(), 140, 28, 610, 26);
-            txtOut.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            btnOut = Add(c2, new AeroButton { Text = "Обзор..." }, 758, 26, 106, 28);
-            btnOut.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            Add(c2, new Label { Text = "Имя образа:" }, 12, 68, 120, 22);
-            txtName = Add(c2, new TextBox { Text = "Windows" }, 140, 64, 724, 26);
-            txtName.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            Add(c2, new Label { Text = "Описание:" }, 12, 104, 120, 22);
-            txtDesc = Add(c2, new TextBox(), 140, 100, 724, 26);
-            txtDesc.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            Add(c2, new Label { Text = "Сжатие:" }, 12, 140, 120, 22);
-            cmbCompress = Add(c2, new ComboBox(), 140, 136, 340, 26);
-            cmbCompress.DropDownStyle = ComboBoxStyle.DropDownList;
+            Head(cpVol, "Раздел для захвата", "Система уже должна быть обобщена: sysprep /generalize. Захват выполняется отсюда, из WinPE.");
+            UiCard c1 = NewCard(cpVol, "Установленные Windows", 340);
+            lvVols = Add(c1, new UiList(), 18, 52, 600, 220);
+            lvVols.Columns.Add("Раздел", 78);
+            lvVols.Columns.Add("Диск", 60);
+            lvVols.Columns.Add("Метка", 160);
+            lvVols.Columns.Add("Размер", 100);
+            lvVols.Columns.Add("Занято", 100);
+            lvVols.Columns.Add("Состояние sysprep", 300);
+            Fluid.Stretch(lvVols, 18);
+            btnVolRefresh = Btn(c1, "Обновить", "refresh", 18, 284, 122, 34, -1);
+            lblVolHint = Hint(c1, "Показаны установленные Windows (кроме той, из которой запущена программа). Sysprep выполняется в самой Windows (D.cmd).", 154, 282, 460, 40, 18);
+            FinishPage(cpVol);
+
+            Head(cpFile, "Файл образа", "Куда сохранить WIM и как его назвать.");
+            UiCard c2 = NewCard(cpFile, "Параметры образа", 330);
+            Cap(c2, "Сохранить в", 18, 52);
+            txtOut = new TextBox();
+            Input(c2, txtOut, 18, 74, 500, 18 + 112 + 8);
+            btnOut = Btn(c2, "Обзор…", "folder", 0, 74, 112, 32, 18);
+            Cap(c2, "Имя образа", 18, 122);
+            txtName = new TextBox { Text = "Windows" };
+            Input(c2, txtName, 18, 144, 500, 18);
+            Cap(c2, "Описание", 18, 190);
+            txtDesc = new TextBox();
+            Input(c2, txtDesc, 18, 212, 500, 18);
+            Cap(c2, "Сжатие", 18, 258);
+            cmbCompress = Add(c2, new UiCombo(), 18, 280, 340, 32);
             cmbCompress.Items.AddRange(new object[] { "fast - быстро (рекомендуется)", "max - максимальное, очень долго", "none - без сжатия" });
             cmbCompress.SelectedIndex = 0;
-            chkHash = Add(c2, new CheckBox { Text = "Записать SHA-256 (файл .sha256 рядом)", Checked = true }, 500, 138, 364, 24);
+            chkHash = Add(c2, new UiCheck { Text = "Записать SHA-256 (файл .sha256 рядом)", Checked = true }, 380, 284, 380, 24);
             string app = Util.AppDir();
             if (app.Length > 2 && !app.StartsWith("X:", StringComparison.OrdinalIgnoreCase))
                 txtOut.Text = Path.Combine(app, "Images\\Windows_" + DateTime.Now.ToString("yyyyMMdd") + ".wim");
+            FinishPage(cpFile);
 
-            GroupBox c3 = Add(cpRun, new AeroGroupBox(), 8, 8, 876, 130);
-            c3.Text = "3. XML ответов (необязательно)"; c3.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            txtXml = Add(c3, new TextBox(), 14, 28, 600, 26);
-            txtXml.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            btnXml = Add(c3, new AeroButton { Text = "Обзор..." }, 622, 26, 118, 28);
-            btnXml.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnXmlClear = Add(c3, new AeroButton { Text = "Без XML" }, 746, 26, 118, 28);
-            btnXmlClear.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            Label xh = Add(c3, new Label(), 14, 62, 850, 62);
-            xh.ForeColor = Color.DimGray;
-            xh.Text = "Если указан - на время захвата копируется в Windows\\Panther\\Unattend\\Unattend.xml захватываемой системы, и попадает в образ "
-                + "(применится при первом запуске развёрнутого образа). После захвата исходный раздел возвращается как был. Пусто - захват без XML (как есть).";
+            Head(cpRun, "XML и запуск", "Файл ответов для захваченного образа (необязательно), затем запуск захвата.");
+            UiCard c3 = NewCard(cpRun, "XML ответов", 214);
+            Cap(c3, "Файл XML (пусто = захват без XML)", 18, 52);
+            txtXml = new TextBox();
+            Input(c3, txtXml, 18, 74, 500, 18 + 104 + 8 + 104 + 8);
+            btnXml = Btn(c3, "Обзор…", "folder", 0, 74, 104, 32, 18 + 104 + 8);
+            btnXmlClear = Btn(c3, "Без XML", null, 0, 74, 104, 32, 18);
+            Hint(c3, "Если указан - на время захвата копируется в Windows\\Panther\\Unattend\\Unattend.xml захватываемой системы и попадает в образ "
+                + "(применится при первом запуске развёрнутого образа). После захвата исходный раздел возвращается как был.", 18, 122, 600, 70, 18);
+            FinishPage(cpRun);
 
             btnVolRefresh.Click += delegate { RefreshVolumes(); };
             btnOut.Click += delegate
@@ -207,7 +202,7 @@ namespace WinInstaller
                     UI(delegate
                     {
                         cur.SubItems[5].Text = GenText(v.Gen);
-                        cur.ForeColor = v.Gen == 7 ? Color.DarkGreen : Color.Firebrick;
+                        cur.ForeColor = v.Gen == 7 ? Theme.Ok : Theme.Danger;
                     });
                     Log("Раздел " + v.Letter + ": " + GenText(v.Gen));
                 }
@@ -281,7 +276,7 @@ namespace WinInstaller
             string scratch = null;
             try
             {
-                UI(delegate { lblStatus.ForeColor = SystemColors.ControlText; });
+                UI(delegate { lblStatus.ForeColor = Theme.Text; });
                 string dism = Util.FindTool("dism.exe");
                 if (!c.DryRun && dism == null) { Fail("Не найден dism.exe"); return; }
                 dism = dism ?? "dism.exe";
