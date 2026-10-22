@@ -32,7 +32,7 @@ namespace WinInstaller
             "    $a = @('add', $k)",
             "    if ($n) { $a += '/v', $n } else { $a += '/ve' }",
             "    $a += '/t', $t, '/d', $(if ($d -eq '') { '\"\"' } else { $d }), '/f'",
-            "    reg.exe @a | Out-Null",
+            "    reg.exe @a 2>&1 | Out-Null",
             "}" });
 
         static readonly Regex IpRe = new Regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}\\z");
@@ -442,6 +442,115 @@ namespace WinInstaller
             }
             if (admin.B("hide")) tl.Add("$adm = (Get-LocalUser | Where-Object { $_.SID.Value -like 'S-1-5-21-*-500' }).Name; if ($adm) { RegSet " + Q(SPEC) + " $adm 'REG_DWORD' 0 }");
 
+            // ---------- Дополнения Buba-Helper: обои, настройки по пользователям (Active Setup), страницы «Параметров» ----------
+            const string RunKey = "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
+            const string ActiveSetup = "HKLM\\SOFTWARE\\Microsoft\\Active Setup\\Installed Components\\{B0BA9E1B-7A55-4C0D-8A3E-5F2B9D4C61A7}";
+            const string UserPolicies = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies";
+            List<string> userAll = new List<string>(), userAdmin = new List<string>(), userOther = new List<string>(), runLogon = new List<string>();
+            List<string> pagesAll = new List<string>(), pagesOther = new List<string>();
+            bool pcFolders = false;
+            foreach (TwGroup tgx in Cat.Tweaks)
+                foreach (Tw twx in tgx.Items)
+                {
+                    if (!twOn(twx.Id)) continue;
+                    userAll.AddRange(twx.UserLines); userAdmin.AddRange(twx.AdminLines); userOther.AddRange(twx.OtherLines);
+                    foreach (string pg in twx.HidePages) if (!pagesAll.Contains(pg)) pagesAll.Add(pg);
+                    foreach (string pg in twx.HidePagesOther) if (!pagesOther.Contains(pg)) pagesOther.Add(pg);
+                    foreach (KeyValuePair<string, string> fl in twx.Files) addFile(fl.Key, fl.Value);
+                    runLogon.AddRange(twx.RunAtLogon);
+                    if (twx.Special == "pcfolders") pcFolders = true;
+                }
+
+            // обои рабочего стола: политика обоев читается из профиля пользователя (HKCU), поэтому пишем в шаблон Default и при первом входе
+            JObj WL = st.O("wall");
+            if (WL.B("on"))
+            {
+                string wp = WL.S("path").Trim();
+                if (!Regex.IsMatch(wp, "^[A-Za-z]:\\\\.+")) wn("Обои: укажите полный путь к файлу на диске, например C:\\Script\\logo.jpg. Файл должен лежать в образе (до первого входа).", "desktop", "wall.path");
+                string[] styles = { "center", "tile", "stretch", "fit", "fill", "span" };
+                string[][] cps = { new string[] { "0", "0" }, new string[] { "0", "1" }, new string[] { "2", "0" }, new string[] { "6", "0" }, new string[] { "10", "0" }, new string[] { "22", "0" } };
+                int si = Math.Max(0, Array.IndexOf(styles, WL.S("style")));   // в политике стиль = номер (0 по центру … 3 по размеру … 5 расширить), в Control Panel\Desktop - свои значения
+                const string DefPol = "HKU\\DefUser\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies";
+                tl.Add("# Обои рабочего стола");
+                tl.Add(R(DefPol + "\\System", "Wallpaper", "REG_SZ", wp));
+                tl.Add(R(DefPol + "\\System", "WallpaperStyle", "REG_SZ", si.ToString(CultureInfo.InvariantCulture)));
+                tl.Add(R("HKU\\DefUser\\Control Panel\\Desktop", "Wallpaper", "REG_SZ", wp));
+                tl.Add(R("HKU\\DefUser\\Control Panel\\Desktop", "WallpaperStyle", "REG_SZ", cps[si][0]));
+                tl.Add(R("HKU\\DefUser\\Control Panel\\Desktop", "TileWallpaper", "REG_SZ", cps[si][1]));
+                userAll.Add("SetReg '" + UserPolicies + "\\System' 'Wallpaper' " + Q(wp) + " String");
+                userAll.Add("SetReg '" + UserPolicies + "\\System' 'WallpaperStyle' '" + si.ToString(CultureInfo.InvariantCulture) + "' String");
+                userAll.Add("SetReg 'HKCU:\\Control Panel\\Desktop' 'Wallpaper' " + Q(wp) + " String");
+                userAll.Add("SetReg 'HKCU:\\Control Panel\\Desktop' 'WallpaperStyle' '" + cps[si][0] + "' String");
+                userAll.Add("SetReg 'HKCU:\\Control Panel\\Desktop' 'TileWallpaper' '" + cps[si][1] + "' String");
+                if (WL.B("lock"))
+                {
+                    tl.Add(R(DefPol + "\\ActiveDesktop", "NoChangingWallPaper", "REG_DWORD", "1"));
+                    userAll.Add("SetReg '" + UserPolicies + "\\ActiveDesktop' 'NoChangingWallPaper' 1 DWord");
+                }
+                if (WL.B("black"))
+                {
+                    tl.Add(R("HKU\\DefUser\\Control Panel\\Colors", "Background", "REG_SZ", "0 0 0"));
+                    userAll.Add("SetReg 'HKCU:\\Control Panel\\Colors' 'Background' '0 0 0' String");
+                }
+                tl.Add("");
+            }
+
+            // страницы «Параметров»: у всех - машинная политика; у остальных, кроме встроенного Администратора, - своя (объединение), в профиле пользователя
+            if (pagesAll.Count > 0)
+            {
+                tl.Add("# Скрыть страницы «Параметров» (для всех)");
+                tl.Add(R("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", "SettingsPageVisibility", "REG_SZ", "hide:" + string.Join(";", pagesAll.ToArray())));
+                tl.Add("");
+            }
+            if (pagesOther.Count > 0)
+            {
+                List<string> un = new List<string>(pagesAll);
+                foreach (string pg in pagesOther) if (!un.Contains(pg)) un.Add(pg);
+                userOther.Add("SetReg '" + UserPolicies + "\\Explorer' 'SettingsPageVisibility' " + Q("hide:" + string.Join(";", un.ToArray())) + " String");
+            }
+
+            // настройки по пользователям: UserSetup.ps1 запускается Active Setup при первом входе каждого пользователя (до Проводника), без окна
+            bool needVbs = runLogon.Count > 0;
+            if (userAll.Count + userAdmin.Count + userOther.Count > 0)
+            {
+                needVbs = true;
+                List<string> ub = new List<string>();
+                ub.Add("# Настройки пользователя при первом входе (Active Setup, запускается до Проводника)");
+                ub.Add("function SetReg($path, $name, $value, $type) { if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }; Set-ItemProperty -Path $path -Name $name -Value $value -Type $type }");
+                ub.AddRange(userAll);
+                if (userAdmin.Count + userOther.Count > 0)
+                {
+                    ub.Add("# встроенный Администратор определяется по SID, оканчивающемуся на -500");
+                    ub.Add("if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -like 'S-1-5-21-*-500') {");
+                    foreach (string l in userAdmin) ub.Add("    " + l);
+                    ub.Add("} else {");
+                    foreach (string l in userOther) ub.Add("    " + l);
+                    ub.Add("}");
+                }
+                addFile("UserSetup.ps1", string.Join("\n", ub.ToArray()));
+                tl.Add("# Настройки по пользователям: Active Setup запускает UserSetup.ps1 при первом входе каждого пользователя");
+                tl.Add(R(ActiveSetup, "StubPath", "REG_SZ", "wscript.exe //B //Nologo " + X.Scr + "\\RunHidden.vbs " + X.Scr + "\\UserSetup.ps1 wait"));
+                tl.Add(R(ActiveSetup, "Version", "REG_SZ", "1"));
+                tl.Add(R(ActiveSetup, "IsInstalled", "REG_DWORD", "1"));
+                tl.Add("");
+            }
+            foreach (string rl in runLogon)
+            {
+                tl.Add("# Запуск без окна при каждом входе: " + rl);
+                tl.Add(R(RunKey, "BubaHelper_" + System.IO.Path.GetFileNameWithoutExtension(rl), "REG_SZ", "wscript.exe //B //Nologo " + X.Scr + "\\RunHidden.vbs " + X.Scr + "\\" + rl));
+                tl.Add("");
+            }
+            if (needVbs)
+            {
+                // wscript вместо прямого запуска powershell: окно консоли не мигает при входе. Файл только ASCII и без BOM (иначе wscript его не прочтёт),
+                // поэтому создаётся командой, а не вшивается в XML. Второй аргумент (wait) - дождаться завершения (нужно для Active Setup).
+                string[] vbs = { "Set a = WScript.Arguments", "cmd = \"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"\"\" & a(0) & \"\"\"\"", "CreateObject(\"WScript.Shell\").Run cmd, 0, (a.Count > 1)" };
+                List<string> vq = new List<string>(); foreach (string v in vbs) vq.Add(Q(v));
+                tl.Add("# Запускатель RunHidden.vbs");
+                tl.Add("Set-Content -Path \"$env:SystemRoot\\Setup\\Scripts\\RunHidden.vbs\" -Encoding Ascii -Value @(" + string.Join(", ", vq.ToArray()) + ")");
+                tl.Add("");
+            }
+
             // ---------- Компоненты Windows ----------
             List<string[]> feats = Cat.Features.FindAll(delegate(string[] f) { return tweaks.B("ft_" + f[0]); });
 
@@ -478,6 +587,7 @@ namespace WinInstaller
                 body.Add("}");
                 spec.Add(mkSpec("Твики системы и удаление приложений", psRun(addFile("Tweaks.ps1", string.Join("\n", body.ToArray()))), null, null));
             }
+            if (pcFolders) spec.Add(mkSpec("Скрыть папки профиля в «Этом компьютере»", psRun(addFile("ThisPC.ps1", GenExtras.ThisPcPs1)), null, null));
 
             // ---------- Свои команды / скрипты ----------
             List<JObj> cmdList = st.Objs("cmds");
@@ -599,6 +709,74 @@ namespace WinInstaller
                 dl.Add("Stop-Transcript | Out-Null");
                 logon.Add(mkSpec("Настройка Защитника Windows", null, psRun(addFile("DefenderExclusions.ps1", string.Join("\n", dl.ToArray()))), null));
             }
+
+            // ---------- Правила брандмауэра ----------
+            JObj FW = st.O("fw");
+            List<string> fwProgs = DfList(FW.S("progs")), fwDirs = DfList(FW.S("dirs"));
+            List<string[]> fwPorts = new List<string[]>();   // {протокол, направление, порт или диапазон}
+            string[][] fwSrc = { new string[] { "tcpIn", "TCP", "Inbound" }, new string[] { "udpIn", "UDP", "Inbound" }, new string[] { "tcpOut", "TCP", "Outbound" } };
+            foreach (string[] fs in fwSrc)
+                foreach (string tok in Regex.Split(FW.S(fs[0]), "[\\s;,]+"))
+                {
+                    if (tok.Length == 0) continue;
+                    Match pm = Regex.Match(tok, "^([0-9]{1,5})(-([0-9]{1,5}))?\\z");
+                    int p1 = pm.Success ? ParseInt(pm.Groups[1].Value) : 0, p2 = pm.Success && pm.Groups[3].Success ? ParseInt(pm.Groups[3].Value) : p1;
+                    if (!pm.Success || p1 < 1 || p2 > 65535 || p2 < p1) wn("Брандмауэр: порт «" + tok + "» некорректен (нужно число 1–65535 или диапазон 1000-2000) — пропущен.", "defender", "fw." + fs[0]);
+                    else fwPorts.Add(new string[] { fs[1], fs[2], tok });
+                }
+            if (fwProgs.Count + fwDirs.Count + fwPorts.Count > 0)
+            {
+                List<string> fl = new List<string>(header("Firewall"));
+                fl.Add("$grp = 'Buba-Helper'");
+                fl.Add("Remove-NetFirewallRule -Group $grp -ErrorAction SilentlyContinue");
+                List<string> qpr = new List<string>(), qdr = new List<string>();
+                foreach (string s in fwProgs) qpr.Add(Q(s));
+                foreach (string s in fwDirs) qdr.Add(Q(s));
+                if (fwProgs.Count + fwDirs.Count > 0)
+                {
+                    fl.Add("$progs = @(" + string.Join(", ", qpr.ToArray()) + ")");
+                    fl.Add("# папки: все .exe внутри на момент входа (если ПО поставлено в образ заранее)");
+                    fl.Add("foreach ($d in @(" + string.Join(", ", qdr.ToArray()) + ")) { if (Test-Path -LiteralPath $d) { $progs += Get-ChildItem -LiteralPath $d -Recurse -Filter *.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } } }");
+                    fl.Add("$progs = @($progs | Sort-Object -Unique)");
+                    fl.Add("foreach ($p in $progs) { $n = Split-Path $p -Leaf; foreach ($dir in 'Inbound', 'Outbound') { New-NetFirewallRule -DisplayName \"$n ($dir)\" -Group $grp -Program $p -Direction $dir -Action Allow -Profile Any | Out-Null } }");
+                    if (FW.B("defender")) fl.Add("if ($progs.Count -gt 0) { try { Add-MpPreference -ExclusionProcess @($progs | ForEach-Object { Split-Path $_ -Leaf } | Sort-Object -Unique) } catch { Write-Warning $_ } }");
+                }
+                foreach (string[] fp in fwPorts)
+                    fl.Add("New-NetFirewallRule -DisplayName '" + fp[0] + " " + fp[2] + " (" + fp[1] + ")' -Group $grp -Direction " + fp[1] + " -Protocol " + fp[0] + (fp[1] == "Inbound" ? " -LocalPort " : " -RemotePort ") + fp[2] + " -Action Allow -Profile Any | Out-Null");
+                fl.Add("Write-Output (\"Правил брандмауэра: {0}\" -f @(Get-NetFirewallRule -Group $grp).Count)");
+                fl.Add("Stop-Transcript | Out-Null");
+                logon.Add(mkSpec("Правила брандмауэра", null, psRun(addFile("Firewall.ps1", string.Join("\n", fl.ToArray()))), null));
+            }
+
+            // ---------- Ярлыки: переименование в меню «Пуск» и копирование на общий рабочий стол ----------
+            JObj LK = st.O("lnk");
+            string lnkDir = LK.S("dir").Trim();
+            List<string[]> lnkMap = new List<string[]>();
+            foreach (string ln in DfList(LK.S("map")))
+            {
+                int eq = ln.IndexOf('=');
+                string o1 = eq > 0 ? ln.Substring(0, eq).Trim() : "", n1 = eq > 0 ? ln.Substring(eq + 1).Trim() : "";
+                if (o1.Length == 0 || n1.Length == 0 || Regex.IsMatch(o1 + n1, "[\\\\/:*?\"<>|]")) wn("Ярлыки: строка «" + ln + "» должна быть вида «Старое имя = Новое имя» без символов \\ / : * ? \" < > |.", "desktop", "lnk.map");
+                else lnkMap.Add(new string[] { o1, n1 });
+            }
+            List<string> lnkDesk = DfList(LK.S("desktop"));
+            if (lnkDir.Length > 0 && lnkMap.Count + lnkDesk.Count > 0)
+            {
+                List<string> sl = new List<string>(header("Shortcuts"));
+                sl.Add("$dir = " + Q(lnkDir));
+                sl.Add("$map = [ordered]@{");
+                foreach (string[] m in lnkMap) sl.Add("    " + Q(m[0]) + " = " + Q(m[1]));
+                sl.Add("}");
+                sl.Add("foreach ($k in $map.Keys) { $src = Join-Path $dir $k; $dst = Join-Path $dir $map[$k]; if ((Test-Path -LiteralPath $src) -and -not (Test-Path -LiteralPath $dst)) { Rename-Item -LiteralPath $src -NewName $map[$k]; Write-Output \"Переименовано: $k -> $($map[$k])\" } }");
+                if (lnkDesk.Count > 0)
+                {
+                    List<string> qd2 = new List<string>(); foreach (string s in lnkDesk) qd2.Add(Q(s));
+                    sl.Add("foreach ($n in @(" + string.Join(", ", qd2.ToArray()) + ")) { $s = Join-Path $dir $n; if (Test-Path -LiteralPath $s) { Copy-Item -LiteralPath $s -Destination (Join-Path \"$env:PUBLIC\\Desktop\" $n) -Force; Write-Output \"На рабочий стол: $n\" } else { Write-Output \"Не найден: $s\" } }");
+                }
+                sl.Add("Stop-Transcript | Out-Null");
+                logon.Add(mkSpec("Ярлыки (переименование, рабочий стол)", null, psRun(addFile("Shortcuts.ps1", string.Join("\n", sl.ToArray()))), null));
+            }
+            else if (lnkDir.Length == 0 && lnkMap.Count + lnkDesk.Count > 0) wn("Ярлыки: укажите папку, в которой лежат ярлыки.", "desktop", "lnk.dir");
 
             // ---------- Wi-Fi ----------
             if (Y.B("wifiOn"))
@@ -746,6 +924,7 @@ namespace WinInstaller
                 tsl.Add("Start-Transcript -Path \"$env:SystemRoot\\Setup\\Scripts\\Tasks.log\" -Force | Out-Null");
                 tsl.Add("");
                 int tcount = 0;
+                List<string> tsMaster = tsl;
                 for (int i = 0; i < tasks.Count; i++)
                 {
                     JObj t = tasks[i];
@@ -753,7 +932,11 @@ namespace WinInstaller
                     if (name.Length == 0 || t.S("program").Trim().Length == 0) { wn("Задача планировщика №" + (i + 1) + ": укажите имя и программу.", "tasks", "tasks:" + i); continue; }
                     string runAs = t.S("runAs");
                     if (runAs == "user" && t.S("user").Trim().Length == 0) { wn("Задача «" + name + "»: не указан пользователь.", "tasks", "tasks:" + i); continue; }
+                    string folder = Regex.Replace(t.S("folder").Trim().Replace('/', '\\'), "^\\\\+|\\\\+\\z", "");
+                    if (Regex.IsMatch(folder, "[:*?\"<>|]")) { wn("Задача «" + name + "»: в имени папки планировщика недопустимы символы : * ? \" < > |.", "tasks", "tasks:" + i); continue; }
+                    string tpath = folder.Length > 0 ? " -TaskPath " + Q("\\" + folder + "\\") : "";
                     tcount++;
+                    tsl = new List<string>();   // строки задачи собираются отдельно: при «только если программа есть» их оборачивает проверка
                     string runLevel = t.B("highest") ? "Highest" : "Limited";
                     tsl.Add("# " + name);
                     tsl.Add("$action = New-ScheduledTaskAction -Execute " + Q(t.S("program").Trim())
@@ -780,28 +963,41 @@ namespace WinInstaller
                         case "once": tsl.Add("$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(" + n + ")"); break;
                         case "interval": tsl.Add("$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes " + n + ") -RepetitionDuration (New-TimeSpan -Days 3650)"); break;
                     }
-                    tsl.Add("$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)");
+                    string tset = "-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable";
+                    if (t.B("ignoreNew")) tset += " -MultipleInstances IgnoreNew";
+                    if (t.B("restart")) tset += " -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)";
+                    tset += t.I("limit") > 0 ? " -ExecutionTimeLimit (New-TimeSpan -Minutes " + t.I("limit") + ")" : " -ExecutionTimeLimit ([TimeSpan]::Zero)";
+                    tsl.Add("$settings = New-ScheduledTaskSettingsSet " + tset);
                     if (runAs == "system")
                     {
                         tsl.Add("$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel " + runLevel);
-                        tsl.Add("Register-ScheduledTask -TaskName " + Q(name) + " -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null");
+                        tsl.Add("Register-ScheduledTask -TaskName " + Q(name) + tpath + " -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null");
                     }
                     else if (runAs == "users")
                     {
                         tsl.Add("$principal = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel " + runLevel);
-                        tsl.Add("Register-ScheduledTask -TaskName " + Q(name) + " -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null");
+                        tsl.Add("Register-ScheduledTask -TaskName " + Q(name) + tpath + " -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null");
                     }
                     else if (runAs == "current")
                     {
                         tsl.Add("$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel " + runLevel);
-                        tsl.Add("Register-ScheduledTask -TaskName " + Q(name) + " -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null");
+                        tsl.Add("Register-ScheduledTask -TaskName " + Q(name) + tpath + " -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null");
                     }
                     else
                     {
-                        tsl.Add("Register-ScheduledTask -TaskName " + Q(name) + " -Action $action -Trigger $trigger -Settings $settings -User " + Q(t.S("user").Trim()) + " -Password " + Q(t.S("pass")) + " -RunLevel " + runLevel + " -Force | Out-Null");
+                        tsl.Add("Register-ScheduledTask -TaskName " + Q(name) + tpath + " -Action $action -Trigger $trigger -Settings $settings -User " + Q(t.S("user").Trim()) + " -Password " + Q(t.S("pass")) + " -RunLevel " + runLevel + " -Force | Out-Null");
                     }
-                    if (t.B("runNow")) tsl.Add("Start-ScheduledTask -TaskName " + Q(name));
+                    if (t.B("runNow")) tsl.Add("Start-ScheduledTask -TaskName " + Q(name) + tpath);
                     tsl.Add("");
+                    if (t.B("needExe"))
+                    {
+                        tsMaster.Add("if (Test-Path -LiteralPath " + Q(t.S("program").Trim()) + ") {");
+                        foreach (string tline in tsl) tsMaster.Add(tline.Length == 0 ? "" : "    " + tline);
+                        tsMaster.Add("}");
+                        tsMaster.Add("");
+                    }
+                    else tsMaster.AddRange(tsl);
+                    tsl = tsMaster;
                 }
                 tsl.Add("Stop-Transcript | Out-Null");
                 if (tcount > 0) logon.Add(mkSpec("Создание задач планировщика", null, psRun(addFile("ScheduledTasks.ps1", string.Join("\n", tsl.ToArray()))), null));
@@ -813,7 +1009,10 @@ namespace WinInstaller
             // ---------- Извлечение зашитых файлов (первая команда specialize) ----------
             if (files.Count > 0)
             {
-                string extract = "powershell -NoProfile -Command \"$x=New-Object Xml.XmlDocument;$x.Load('C:\\Windows\\Panther\\unattend.xml');$x.SelectNodes('//*[@path]')|%{md (Split-Path $_.path) -Force|Out-Null;($_.InnerText.Trim()-split'\\n')|sc $_.path -Enc UTF8}\"";
+                // Файл ответов ищется и в Panther\unattend.xml (Windows создаёт его до specialize только при sysprep /unattend:),
+                // и в Panther\Unattend\Unattend.xml (так он лежит при разворачивании образа через dism /Apply-Image). Без этого скрипты не извлекались.
+                // (лимит 259 знаков на команду: поэтому подстановочные знаки в путях и сокращённые ключи -nop / -c)
+                string extract = "powershell -nop -c \"$x=[xml](gc -Raw -Enc UTF8 (gi C:\\Windows\\Panther\\*nattend.xml,C:\\Windows\\Panther\\*\\*nattend.xml -ea 0)[0]);$x.SelectNodes('//*[@path]')|%{md (Split-Path $_.path) -Force|Out-Null;($_.InnerText.Trim()-split'\\n')|sc $_.path -Enc UTF8}\"";
                 if (extract.Length > 259) wn1("Внутренняя команда извлечения скриптов длиннее 259 символов.");
                 spec.Insert(0, mkSpec("Извлечение скриптов из файла ответов", extract, null, null));
             }

@@ -18,7 +18,8 @@ namespace WinInstaller
         }
         public static List<object> L(params object[] items) { return new List<object>(items); }
 
-        public static JObj DefaultTask() { return J("name", "", "program", "", "args", "", "workdir", "", "trigger", "logon", "time", "03:00", "days", L("Monday"), "n", 15, "runAs", "system", "user", "", "pass", "", "highest", true, "runNow", false); }
+        public static JObj DefaultTask() { return J("name", "", "program", "", "args", "", "workdir", "", "trigger", "logon", "time", "03:00", "days", L("Monday"), "n", 15, "runAs", "system", "user", "", "pass", "", "highest", true, "runNow", false,
+            "folder", "", "limit", 0, "restart", false, "ignoreNew", false, "needExe", false); }
         public static JObj DefaultCmd() { return J("desc", "", "phase", "firstlogon", "kind", "ps", "body", ""); }
         public static JObj DefaultUser() { return J("name", "", "display", "", "pass", "", "group", "Administrators", "desc", "", "neverExp", true, "hidden", false); }
         public static JObj DefaultReg() { return J("key", "HKLM\\SOFTWARE\\", "name", "", "type", "REG_DWORD", "data", ""); }
@@ -52,6 +53,9 @@ namespace WinInstaller
                 "tweaks", J("fileext", true, "hidden", false, "thispc", true, "pwdexp", true, "nolockout", true),
                 "bloat", J(),
                 "apps", J("mgr", "winget", "pkgs", J(), "custom", ""),
+                "wall", J("on", false, "path", "", "style", "fit", "lock", true, "black", true),
+                "fw", J("progs", "", "dirs", "", "tcpIn", "", "udpIn", "", "tcpOut", "", "defender", false),
+                "lnk", J("dir", "", "map", "", "desktop", ""),
                 "regs", L(),
                 "cmds", L(),
                 "tasks", L());
@@ -96,6 +100,7 @@ namespace WinInstaller
             e["cmds[].kind"] = S("ps", "cmd", "exe");
             e["tasks[].trigger"] = S("logon", "startup", "daily", "weekly", "once", "interval");
             e["tasks[].runAs"] = S("system", "users", "current", "user");
+            e["wall.style"] = S("center", "tile", "stretch", "fit", "fill", "span");
             return e;
         }
 
@@ -105,7 +110,7 @@ namespace WinInstaller
             r["install.index"] = new int[] { 1, 99 }; r["install.diskId"] = new int[] { 0, 99 }; r["install.dataDiskId"] = new int[] { 0, 99 };
             r["install.recoverySize"] = new int[] { 100, 1000000 }; r["install.efiSize"] = new int[] { 50, 100000 }; r["install.winSize"] = new int[] { 0, 100000000 };
             r["remote.rdpPort"] = new int[] { 1, 65535 }; r["net.prefix"] = new int[] { 1, 32 }; r["act.kmsPort"] = new int[] { 1, 65535 };
-            r["autologon.count"] = new int[] { 1, 999999999 }; r["autologon.user"] = new int[] { -1, 999 }; r["tasks[].n"] = new int[] { 1, 1000000 };
+            r["autologon.count"] = new int[] { 1, 999999999 }; r["autologon.user"] = new int[] { -1, 999 }; r["tasks[].n"] = new int[] { 1, 1000000 }; r["tasks[].limit"] = new int[] { 0, 100000 };
             return r;
         }
 

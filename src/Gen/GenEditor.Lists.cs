@@ -209,6 +209,11 @@ namespace WinInstaller
                     DaysRow(x, item, delegate() { return tr() == "weekly"; });
                     Chk(x, BI(item, "highest"), "Наивысшие права", half: true);
                     Chk(x, BI(item, "runNow"), "Сразу запустить после создания", half: true);
+                    Txt(x, BI(item, "folder"), "Папка в планировщике (пусто — корень)", half: true, ph: "IT");
+                    Num(x, BI(item, "limit"), "Ограничить время выполнения, мин (0 — без ограничения)", 0, 100000, null, true);
+                    Chk(x, BI(item, "restart"), "При сбое перезапускать (каждую минуту, до 3 раз)", half: true);
+                    Chk(x, BI(item, "ignoreNew"), "Не запускать вторую копию, пока работает прошлая", half: true);
+                    Chk(x, BI(item, "needExe"), "Создавать, только если файл программы уже есть", half: true);
                     break;
             }
             foreach (GRow r in x.Rows) if (r.Load != null) r.Load();

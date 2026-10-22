@@ -12,7 +12,19 @@ namespace WinInstaller
     class Ed { public string Name, Key; public string[] Os; }
     class BloatItem { public string Id, Label, Os = ""; }
     class Pkg { public string Id, Name, Winget, Choco; }
-    class Tw { public string Id, Label, Hint, Warn, Os; public bool Rec; public string[] Lines; }
+    class Tw
+    {
+        public string Id, Label, Hint, Warn, Os; public bool Rec; public string[] Lines;
+        // Дополнения Buba-Helper (см. GenExtras.cs). Строки - PowerShell; в UserLines/AdminLines/OtherLines доступна функция SetReg(путь, имя, значение, тип) для HKCU:\
+        public string[] UserLines = new string[0];      // для каждого пользователя при его первом входе (Active Setup)
+        public string[] AdminLines = new string[0];     // только для встроенного Администратора (SID …-500)
+        public string[] OtherLines = new string[0];     // для всех, кроме встроенного Администратора
+        public string[] HidePages = new string[0];      // страницы «Параметров» (ms-settings:), скрытые у всех
+        public string[] HidePagesOther = new string[0]; // страницы, скрытые у всех, кроме встроенного Администратора
+        public string[] RunAtLogon = new string[0];     // скрипты из Files, запускаемые без окна при каждом входе
+        public Dictionary<string, string> Files = new Dictionary<string, string>();   // имя файла → содержимое (кладётся в C:\Windows\Setup\Scripts)
+        public string Special;                          // особая обработка в Generator.cs
+    }
     class TwGroup { public string Name; public List<Tw> Items = new List<Tw>(); }
     class PresetInfo { public string Id, Title, Desc; }
 
@@ -77,6 +89,7 @@ namespace WinInstaller
                 PresetInfo pi = new PresetInfo(); pi.Id = p.S("id"); pi.Title = p.S("title"); pi.Desc = p.S("desc");
                 Presets.Add(pi);
             }
+            GenExtras.Patch();   // твики Buba-Helper поверх выгрузки оригинала (gendata.json перезаписывается devtools/export-gen-data.js)
         }
 
         static List<string> Strs(List<object> a)
