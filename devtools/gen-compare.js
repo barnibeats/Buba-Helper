@@ -100,7 +100,10 @@ function fuzzState() {
 
 /* ---------- набор случаев ---------- */
 const cases = [];
-const add = (name, state, preset) => cases.push({name, state, preset});
+/* Твик «Скрыть поле поиска» в Buba-Helper намеренно расширен (HideSearch.ps1 + Active Setup, см. src/Gen/GenExtras.cs) и
+   с ним результат не совпадает с оригиналом, поэтому в сверке он выключается; остальное сравнивается посимвольно. */
+const noSearch = s => { if (s && typeof s === 'object' && s.tweaks && typeof s.tweaks === 'object' && !Array.isArray(s.tweaks)) { s = JSON.parse(JSON.stringify(s)); s.tweaks.nosearchbox = false; } return s; };
+const add = (name, state, preset) => cases.push({name, state: noSearch(state), preset});
 for (const f of fs.readdirSync(path.join(repo, 'examples')).filter(f => f.endsWith('.json'))) add('example:' + f, JSON.parse(fs.readFileSync(path.join(repo, 'examples', f), 'utf8')));
 for (const mode of ['clean', 'sysprep']) for (const o of ['10', '11']) {
   const d = app.DEFAULTS(); d.mode = mode; d.os = o;
@@ -111,13 +114,24 @@ for (const mode of ['clean', 'sysprep']) for (const o of ['10', '11']) {
 for (let i = 0; i < N; i++) add('fuzz:' + i, fuzzState());
 
 /* ---------- прогон ---------- */
+/* Намеренные отличия Buba-Helper от оригинала. Они применяются к результату оригинала перед сверкой, чтобы всё остальное
+   по-прежнему сравнивалось посимвольно (новые возможности по умолчанию выключены и в результат не попадают):
+   1) команда извлечения скриптов ищет файл ответов и в Panther\Unattend\Unattend.xml (иначе при развёртывании образа
+      через dism /Apply-Image скрипты не извлекались);
+   2) RegSet скрывает вывод ошибок reg.exe (в окне при установке мелькал текст ошибки). */
+const EXTRACT_OLD = String.raw`powershell -NoProfile -Command &quot;$x=New-Object Xml.XmlDocument;$x.Load('C:\Windows\Panther\unattend.xml');$x.SelectNodes('//*[@path]')|%{md (Split-Path $_.path) -Force|Out-Null;($_.InnerText.Trim()-split'\n')|sc $_.path -Enc UTF8}&quot;`;
+const EXTRACT_NEW = String.raw`powershell -nop -c &quot;$x=[xml](gc -Raw -Enc UTF8 (gi C:\Windows\Panther\*nattend.xml,C:\Windows\Panther\*\*nattend.xml -ea 0)[0]);$x.SelectNodes('//*[@path]')|%{md (Split-Path $_.path) -Force|Out-Null;($_.InnerText.Trim()-split'\n')|sc $_.path -Enc UTF8}&quot;`;
+const REGSET_OLD = '    reg.exe @a | Out-Null', REGSET_NEW = '    reg.exe @a 2>&1 | Out-Null';
+const patched = xml => xml.split(EXTRACT_OLD).join(EXTRACT_NEW).split(REGSET_OLD).join(REGSET_NEW);
+
 function js(state, preset) {
   const problems = [];
   const st = app.sanitize(JSON.parse(JSON.stringify(state)), problems);
   if (preset) app.PRESETS.find(x => x.id === preset).apply(st);
+  if (st.tweaks && st.tweaks.nosearchbox) return {skip: true};   // пресет включил расширенный твик поиска - см. noSearch выше
   const res = app.generate(st);
   const log = problems.map(p => 'настройки: ' + p + '\n').join('') + res.warnings.map(w => '! ' + w.text + '\n').join('');
-  return {xml: res.xml, log, launcher: st.mode === 'sysprep' ? app.generateLauncher(st) : null};
+  return {xml: patched(res.xml), log, launcher: st.mode === 'sysprep' ? app.generateLauncher(st) : null};
 }
 
 function firstDiff(a, b) {
@@ -126,7 +140,7 @@ function firstDiff(a, b) {
   return 'различий по строкам нет (длина ' + a.length + ' / ' + b.length + ')';
 }
 
-let bad = 0, done = 0;
+let bad = 0, done = 0, skipped = 0;
 for (const c of cases) {
   const inF = path.join(tmp, 'in.json'), outF = path.join(tmp, 'out.xml'), lcF = path.join(tmp, 'l.cmd');
   for (const f of [outF, outF + '.log', lcF]) try { fs.unlinkSync(f); } catch (e) {}
@@ -134,6 +148,7 @@ for (const c of cases) {
   fs.writeFileSync(inF, text, 'utf8');
   let exp;
   try { exp = js(c.state, c.preset); } catch (e) { exp = {error: String(e)}; }
+  if (exp.skip) { skipped++; continue; }
   const args = ['--gen', inF, outF, ...(c.preset ? ['--preset', c.preset] : []), ...(exp.launcher != null ? ['--launcher', lcF] : [])];
   const r = spawnSync(exe, args, {encoding: 'utf8'});
   const problems = [];

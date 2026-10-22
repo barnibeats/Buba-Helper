@@ -16,6 +16,10 @@ jobs:
         shell: cmd
         run: build.cmd
 
+      - name: Check answer-file generator (XML + embedded PowerShell syntax)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File devtools\check-gen.ps1
+
       - name: Checksum
         shell: pwsh
         run: |
