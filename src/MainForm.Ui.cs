@@ -141,14 +141,12 @@ namespace WinInstaller
             rbModeInstall = new UiTab { Text = "Установка ISO/WIM", Icon = "disc", Checked = true };
             rbModeCapture = new UiTab { Text = "Захват образа", Icon = "camera" };
             rbModeRepair = new UiTab { Text = "Ремонт загрузчика", Icon = "gear" };
+            rbModeIntegrate = new UiTab { Text = "XML в ISO/WIM", Icon = "box" };
             rbModeXml = new UiTab { Text = "Файл ответов (XML)", Icon = "script" };
-            int tx = 232;
-            foreach (UiTab t in new UiTab[] { (UiTab)rbModeInstall, (UiTab)rbModeCapture, (UiTab)rbModeRepair, (UiTab)rbModeXml })
-            {
-                t.SetBounds(tx, 0, t.PreferredW(), header.Height - 1);
-                header.Controls.Add(t);
-                tx += t.Width + 2;
-            }
+            modeTabs = new UiTab[] { (UiTab)rbModeInstall, (UiTab)rbModeCapture, (UiTab)rbModeRepair, (UiTab)rbModeIntegrate, (UiTab)rbModeXml };
+            foreach (UiTab t in modeTabs) header.Controls.Add(t);
+            header.SizeChanged += delegate { LayoutModeTabs(); };
+            LayoutModeTabs();
 
             // шаги мастера: вкладки без полосы заголовков + боковое меню
             tabInstall = new StepTabs(); tabInstall.Dock = DockStyle.Fill;
@@ -157,6 +155,8 @@ namespace WinInstaller
             body.Controls.Add(tabInstall);
             body.Controls.Add(tabCapture);
             body.Controls.Add(tabRepair);
+            tabIntegrate = new StepTabs(); tabIntegrate.Dock = DockStyle.Fill; tabIntegrate.Visible = false;
+            body.Controls.Add(tabIntegrate);
             navSteps = new NavList(); navSteps.Dock = DockStyle.Left; navSteps.Width = 232; navSteps.Numbered = true;
             body.Controls.Add(navSteps);
 
@@ -259,6 +259,7 @@ namespace WinInstaller
 
             BuildCaptureUi();
             BuildRepairUi();
+            BuildIntegrateUi();
 
             // нижняя полоса: прогресс и статус, журнал, навигация мастера и запуск
             progress = new UiProgress();
@@ -310,7 +311,7 @@ namespace WinInstaller
             cmbEdition.SelectedIndexChanged += delegate { UpdateNav(); };
             lvVols.SelectedIndexChanged += delegate { UpdateNav(); };
             txtOut.TextChanged += delegate { UpdateNav(); };
-            foreach (TabControl tc in new TabControl[] { tabInstall, tabCapture, tabRepair })
+            foreach (TabControl tc in new TabControl[] { tabInstall, tabCapture, tabRepair, tabIntegrate })
             {
                 TabControl tab = tc;
                 tab.Selecting += delegate(object s, TabControlCancelEventArgs e)
@@ -344,6 +345,7 @@ namespace WinInstaller
             {
                 if (rbModeCapture.Checked) StartCapture();
                 else if (rbModeRepair.Checked) StartRepair();
+                else if (rbModeIntegrate.Checked) StartIntegrate();
                 else StartInstall(false);
             };
             rbKeep.CheckedChanged += delegate { ApplyModeLayout(); };
@@ -380,6 +382,7 @@ namespace WinInstaller
             rbModeInstall.CheckedChanged += delegate { SwitchMode(); };
             rbModeCapture.CheckedChanged += delegate { SwitchMode(); };
             rbModeRepair.CheckedChanged += delegate { SwitchMode(); };
+            rbModeIntegrate.CheckedChanged += delegate { SwitchMode(); };
             rbModeXml.CheckedChanged += delegate { SwitchMode(); };
             FormClosing += delegate(object s, FormClosingEventArgs e)
             {
@@ -393,10 +396,33 @@ namespace WinInstaller
             UpdateNav();
         }
 
+        UiTab[] modeTabs;
+
+        /// <summary>Вкладки режимов в шапке: если не помещаются, поля вокруг подписей сужаются.</summary>
+        void LayoutModeTabs()
+        {
+            int avail = header.Width - 232 - 12;
+            int pad = 54;
+            for (; pad > 30; pad -= 2)
+            {
+                int total = 2 * (modeTabs.Length - 1);
+                foreach (UiTab t in modeTabs) { t.Pad = pad; total += t.PreferredW(); }
+                if (total <= avail) break;
+            }
+            int tx = 232;
+            foreach (UiTab t in modeTabs)
+            {
+                t.Pad = pad;
+                t.SetBounds(tx, 0, t.PreferredW(), header.Height - 1);
+                tx += t.Width + 2;
+            }
+            header.Invalidate();
+        }
+
         /// <summary>Заполняет боковое меню шагами текущего режима.</summary>
         void RebuildNav()
         {
-            string[] steps = rbModeCapture.Checked ? CaptureSteps : rbModeRepair.Checked ? RepairSteps : InstallSteps;
+            string[] steps = rbModeCapture.Checked ? CaptureSteps : rbModeRepair.Checked ? RepairSteps : rbModeIntegrate.Checked ? IntegrateSteps : InstallSteps;
             navSteps.ClearItems();
             foreach (string s in steps) navSteps.Add(s, null);
             navSteps.SelectSilently(CurrentTabs().SelectedIndex);

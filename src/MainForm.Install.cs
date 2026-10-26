@@ -186,8 +186,8 @@ namespace WinInstaller
         {
             installing = w;
             btnInstall.Enabled = !w;
-            tabInstall.Enabled = !w; tabCapture.Enabled = !w; tabRepair.Enabled = !w;
-            rbModeInstall.Enabled = !w; rbModeCapture.Enabled = !w; rbModeRepair.Enabled = !w; rbModeXml.Enabled = !w;
+            tabInstall.Enabled = !w; tabCapture.Enabled = !w; tabRepair.Enabled = !w; tabIntegrate.Enabled = !w;
+            rbModeInstall.Enabled = !w; rbModeCapture.Enabled = !w; rbModeRepair.Enabled = !w; rbModeIntegrate.Enabled = !w; rbModeXml.Enabled = !w;
             navSteps.Enabled = !w;
             if (w) ShowLog(true);   // во время работы журнал виден сразу
             UpdateNav();

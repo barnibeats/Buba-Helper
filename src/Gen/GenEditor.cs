@@ -135,6 +135,7 @@ namespace WinInstaller
         public JObj St = GenState.Defaults();
         public event Action IndexChanged, Regenerated;
         public event Action<string, bool> UseXml;     // путь к сохранённому XML, это файл для Sysprep?
+        public event Action<string, bool, string> UseIso;   // то же для вкладки «XML в ISO/WIM»: XML, это файл для Sysprep?, путь к Start-Sysprep.cmd (или null)
         public string StatePath;
 
         bool loading;

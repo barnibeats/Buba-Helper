@@ -124,6 +124,7 @@ namespace WinInstaller
                 RefreshDisks(); ScanSources(); UpdatePlanText();
                 if (Program.StartMode == "xml") { rbModeXml.Checked = true; if (genEditor != null) genEditor.Go(Program.StartPage); }
                 else if (Program.StartMode == "capture") rbModeCapture.Checked = true;
+                else if (Program.StartMode == "integrate") rbModeIntegrate.Checked = true;
                 else if (Program.StartMode == "repair")
                 {
                     rbModeRepair.Checked = true;
@@ -137,12 +138,13 @@ namespace WinInstaller
             Dark.Title(Handle);
         }
 
-        TabControl CurrentTabs() { return rbModeCapture.Checked ? tabCapture : rbModeRepair.Checked ? tabRepair : tabInstall; }
+        TabControl CurrentTabs() { return rbModeCapture.Checked ? tabCapture : rbModeRepair.Checked ? tabRepair : rbModeIntegrate.Checked ? tabIntegrate : tabInstall; }
 
         /// <summary>Что мешает уйти с шага step вперёд; null - шаг заполнен.</summary>
         string StepProblem(int step)
         {
             if (rbModeRepair.Checked) return RepairProblem(step);
+            if (rbModeIntegrate.Checked) return IntegrateProblem(step);
             if (rbModeCapture.Checked)
             {
                 if (step == 0 && lvVols.SelectedItems.Count == 0) return "Выберите Windows-раздел для захвата.";
@@ -191,6 +193,7 @@ namespace WinInstaller
             btnNext.Enabled = pr == null && idle;
             if (!installing) lblNavHint.Text = pr ?? "";
             if (i == last && rbModeRepair.Checked) lblRepSummary.Text = BuildRepairSummary();
+            else if (i == last && rbModeIntegrate.Checked) lblIntSummary.Text = BuildIntegrateSummary();
             else if (i == last && !rbModeCapture.Checked) lblSummary.Text = BuildSummary();
         }
 

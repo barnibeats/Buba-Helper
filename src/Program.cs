@@ -28,6 +28,7 @@ namespace WinInstaller
         static void Main(string[] args)
         {
             if (args.Length > 0 && args[0].ToLowerInvariant() == "--gen") { Environment.Exit(GenCli.Run(args)); return; }   // генератор XML без окна
+            if (args.Length > 0 && args[0].ToLowerInvariant() == "--integrate") { Environment.Exit(IntegrateCli.Run(args)); return; }   // файлы ответов в ISO/WIM без окна
             if (args.Length > 1 && args[0].ToLowerInvariant() == "--selftest-ui")   // самопроверка редактора файла ответов
             {
                 Application.EnableVisualStyles();
@@ -46,7 +47,7 @@ namespace WinInstaller
                 else if (a == "--profile" && i + 1 < args.Length) profile = args[++i];
                 else if (a == "--auto") auto = true;
                 else if (a == "--yes") yes = true;
-                else if (a == "--mode" && i + 1 < args.Length) StartMode = args[++i].ToLowerInvariant();   // install | capture | repair | xml
+                else if (a == "--mode" && i + 1 < args.Length) StartMode = args[++i].ToLowerInvariant();   // install | capture | repair | integrate | xml
                 else if (a == "--page" && i + 1 < args.Length) int.TryParse(args[++i], out StartPage);
                 else if (a == "--export-icon" && i + 1 < args.Length) { Icons.WriteIco(args[++i]); return; }   // для сборки: значок exe
             }

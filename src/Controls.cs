@@ -153,6 +153,7 @@ namespace WinInstaller
     {
         bool hot;
         public string Icon;
+        public int Pad = 54;   // поля вокруг подписи (вместе со значком); сужается, если вкладки не помещаются в шапку
 
         public UiTab()
         {
@@ -163,7 +164,7 @@ namespace WinInstaller
         }
         public int PreferredW()
         {
-            return 54 + TextRenderer.MeasureText(Text, Font, new Size(int.MaxValue, int.MaxValue), Theme.TF).Width;
+            return Pad + TextRenderer.MeasureText(Text, Font, new Size(int.MaxValue, int.MaxValue), Theme.TF).Width;
         }
         protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }

@@ -304,6 +304,9 @@ namespace WinInstaller
             btnUseCapture = new UiButton(); btnUseCapture.Text = "Использовать для захвата образа"; btnUseCapture.Size = new Size(270, 36); btnUseCapture.Primary = true; btnUseCapture.Margin = new Padding(0, 0, 10, 8);
             btnUseCapture.Click += delegate { UseForInstall(true); };
             bar.Controls.Add(btnUseCapture);
+            UiButton btnUseIso = new UiButton(); btnUseIso.Text = "Вшить в ISO / WIM"; btnUseIso.Size = new Size(190, 36); btnUseIso.Margin = new Padding(0, 0, 10, 8);
+            btnUseIso.Click += delegate { UseForIso(); };
+            bar.Controls.Add(btnUseIso);
             p.Controls.Add(bar);
 
             warnBox = new ListBox();
@@ -466,6 +469,25 @@ namespace WinInstaller
                 }
                 catch (Exception ex) { MessageBox.Show(this, ex.Message, "Сохранение комплекта"); }
             }
+        }
+
+        void UseForIso()
+        {
+            try
+            {
+                string dir = Path.Combine(Path.GetTempPath(), "Buba-Helper");
+                Directory.CreateDirectory(dir);
+                string path = Path.Combine(dir, XmlName);
+                File.WriteAllText(path, last.Xml, new UTF8Encoding(false));
+                string cmd = null;
+                if (last.IsSys)
+                {
+                    cmd = Path.Combine(dir, "Start-Sysprep.cmd");
+                    File.WriteAllText(cmd, GenLauncher.Launcher(St), new UTF8Encoding(false));
+                }
+                if (UseIso != null) UseIso(path, last.IsSys, cmd);
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Файл ответов"); }
         }
 
         void UseForInstall(bool forCapture)
