@@ -1,6 +1,8 @@
 # build output
 bin/
 obj/
+out/
+debug-folder/
 *.exe
 *.pdb
 
@@ -10,6 +12,10 @@ profile.ini
 Images/
 Drivers/
 tools/
+
+# чужие бинарники (не публикуются): собираются локально/в CI, см. devtools/make-net-drivers.ps1
+assets/net-drivers.zip
+assets/bootsect.exe
 
 # local, company-specific sysprep kit (contains accounts, passwords, license servers) - never publish
 sysprep/

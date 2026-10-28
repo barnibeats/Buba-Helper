@@ -1,4 +1,4 @@
-// Главная форма: поля, конструктор и логика мастера шагов. Построение интерфейса - в MainForm.Ui.cs.
+﻿// Главная форма: поля, конструктор и логика мастера шагов. Построение интерфейса - в MainForm.Ui.cs.
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -122,9 +122,11 @@ namespace WinInstaller
             {
                 navSteps.SelectSilently(CurrentTabs().SelectedIndex);   // до создания окна TabControl отдаёт индекс -1
                 RefreshDisks(); ScanSources(); UpdatePlanText();
+                if (!Program.NoUpdate && !autoStart) StartUpdateCheck();
                 if (Program.StartMode == "xml") { rbModeXml.Checked = true; if (genEditor != null) genEditor.Go(Program.StartPage); }
                 else if (Program.StartMode == "capture") rbModeCapture.Checked = true;
                 else if (Program.StartMode == "integrate") rbModeIntegrate.Checked = true;
+                else if (Program.StartMode == "drivers") rbModeDrivers.Checked = true;
                 else if (Program.StartMode == "repair")
                 {
                     rbModeRepair.Checked = true;
@@ -138,12 +140,13 @@ namespace WinInstaller
             Dark.Title(Handle);
         }
 
-        TabControl CurrentTabs() { return rbModeCapture.Checked ? tabCapture : rbModeRepair.Checked ? tabRepair : rbModeIntegrate.Checked ? tabIntegrate : tabInstall; }
+        TabControl CurrentTabs() { return rbModeCapture.Checked ? tabCapture : rbModeRepair.Checked ? tabRepair : rbModeDrivers.Checked ? tabDrivers : rbModeIntegrate.Checked ? tabIntegrate : tabInstall; }
 
         /// <summary>Что мешает уйти с шага step вперёд; null - шаг заполнен.</summary>
         string StepProblem(int step)
         {
             if (rbModeRepair.Checked) return RepairProblem(step);
+            if (rbModeDrivers.Checked) return DriversProblem(step);
             if (rbModeIntegrate.Checked) return IntegrateProblem(step);
             if (rbModeCapture.Checked)
             {
@@ -193,6 +196,7 @@ namespace WinInstaller
             btnNext.Enabled = pr == null && idle;
             if (!installing) lblNavHint.Text = pr ?? "";
             if (i == last && rbModeRepair.Checked) lblRepSummary.Text = BuildRepairSummary();
+            else if (i == last && rbModeDrivers.Checked) lblDrvSummary.Text = BuildDriversSummary();
             else if (i == last && rbModeIntegrate.Checked) lblIntSummary.Text = BuildIntegrateSummary();
             else if (i == last && !rbModeCapture.Checked) lblSummary.Text = BuildSummary();
         }

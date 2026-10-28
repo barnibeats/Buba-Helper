@@ -113,7 +113,7 @@ namespace WinInstaller
             ProcessStartInfo psi = new ProcessStartInfo(exe, args);
             psi.UseShellExecute = false; psi.CreateNoWindow = true;
             psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
-            Encoding enc = Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+            Encoding enc = OemEnc.Get();
             psi.StandardOutputEncoding = enc; psi.StandardErrorEncoding = enc;
             using (Process p = Process.Start(psi))
             {

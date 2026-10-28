@@ -122,7 +122,7 @@ namespace WinInstaller
             ProcessStartInfo psi = new ProcessStartInfo(exe, args);
             psi.UseShellExecute = false; psi.CreateNoWindow = true;
             psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
-            Encoding enc = Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+            Encoding enc = OemEnc.Get();
             psi.StandardOutputEncoding = enc; psi.StandardErrorEncoding = enc;
             using (Process p = Process.Start(psi))
             {
@@ -186,8 +186,8 @@ namespace WinInstaller
         {
             installing = w;
             btnInstall.Enabled = !w;
-            tabInstall.Enabled = !w; tabCapture.Enabled = !w; tabRepair.Enabled = !w; tabIntegrate.Enabled = !w;
-            rbModeInstall.Enabled = !w; rbModeCapture.Enabled = !w; rbModeRepair.Enabled = !w; rbModeIntegrate.Enabled = !w; rbModeXml.Enabled = !w;
+            tabInstall.Enabled = !w; tabCapture.Enabled = !w; tabRepair.Enabled = !w; tabDrivers.Enabled = !w; tabIntegrate.Enabled = !w;
+            rbModeInstall.Enabled = !w; rbModeCapture.Enabled = !w; rbModeRepair.Enabled = !w; rbModeDrivers.Enabled = !w; rbModeIntegrate.Enabled = !w; rbModeXml.Enabled = !w;
             navSteps.Enabled = !w;
             if (w) ShowLog(true);   // во время работы журнал виден сразу
             UpdateNav();
@@ -199,6 +199,7 @@ namespace WinInstaller
             RefreshDisks();
             if (rbModeCapture.Checked) RefreshVolumes();
             if (rbModeRepair.Checked) RefreshSystems();
+            if (rbModeDrivers.Checked) RefreshDrvSystems();
         }
 
         /// <summary>

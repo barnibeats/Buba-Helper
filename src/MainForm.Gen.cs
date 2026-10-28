@@ -11,21 +11,23 @@ namespace WinInstaller
     {
         void SwitchMode()
         {
-            bool cap = rbModeCapture.Checked, rep = rbModeRepair.Checked, itg = rbModeIntegrate.Checked, xml = rbModeXml.Checked;
+            bool cap = rbModeCapture.Checked, rep = rbModeRepair.Checked, drv = rbModeDrivers.Checked, itg = rbModeIntegrate.Checked, xml = rbModeXml.Checked;
             if (xml) EnsureGen();
             tabCapture.Visible = cap;
             tabRepair.Visible = rep;
+            tabDrivers.Visible = drv;
             tabIntegrate.Visible = itg;
-            tabInstall.Visible = !cap && !rep && !itg && !xml;
+            tabInstall.Visible = !cap && !rep && !drv && !itg && !xml;
             navSteps.Visible = !xml;
             if (genEditor != null) genEditor.Visible = xml;
             progress.Visible = lblStatus.Visible = btnLog.Visible = !xml;
             pnlLog.Visible = logOpen && !xml;
             LayoutFooter(xml);
-            btnInstall.Text = cap ? "ЗАХВАТИТЬ ОБРАЗ" : rep ? "ИСПРАВИТЬ ЗАГРУЗЧИК" : itg ? "ВШИТЬ ФАЙЛЫ ОТВЕТОВ" : "УСТАНОВИТЬ WINDOWS";
+            btnInstall.Text = cap ? "ЗАХВАТИТЬ ОБРАЗ" : rep ? "ИСПРАВИТЬ ЗАГРУЗЧИК" : drv ? "ДОБАВИТЬ ДРАЙВЕРЫ" : itg ? "ВШИТЬ ФАЙЛЫ ОТВЕТОВ" : "УСТАНОВИТЬ WINDOWS";
             if (!xml) RebuildNav();
             if (cap) RefreshVolumes();
             if (rep) RefreshSystems();
+            if (drv) { RefreshDrvSystems(); if (lvDrvFound.Items.Count == 0 && !drvScanning) ScanDrvPacks(); }
             if (itg && txtIntSrc.Text.Trim().Length == 0 && sourcePath != null) { txtIntSrc.Text = sourcePath; LoadIntSource(sourcePath); }   // образ уже выбран на вкладке установки
             UpdateNav();
         }

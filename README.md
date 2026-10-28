@@ -5,7 +5,7 @@
 ![platform: WinPE / Windows 10-11](https://img.shields.io/badge/platform-WinPE%20%7C%20Windows%2010%E2%80%9311-lightgrey)
 
 Графическая утилита для **WinPE** (Sergei Strelec и др.) и обычной Windows. Четыре режима: **установка ISO/WIM/ESD** с выбором диска, разметки GPT/MBR, размера (МБ или ГБ) и раздела восстановления; **захват** sysprep-образа в WIM; **ремонт загрузчика** Windows 7/8/10/11 (UEFI и BIOS) и **генератор файла ответов** (utounattend.xml / unattend.xml), встроенный в программу. Генератор — порт [generator_XML_Windows](https://github.com/barnibeats/generator_XML_Windows) на C#.
-Один `exe`, без установки и зависимостей, кроме .NET Framework 4.
+Один `exe` (около 70 МБ): .NET 8 уже внутри, ничего ставить не нужно — запускается и в WinPE без .NET Framework. При запуске проверяет новую версию в [релизах](https://github.com/barnibeats/Buba-Helper/releases) и предлагает обновиться (отключить: `--no-update`).
 
 > **In short:** a single-file WinForms tool for WinPE. *Install*: pick image (ISO/WIM/ESD) → pick disk (the WinPE boot media is excluded) → partition (GPT/MBR, size in MB or GB, optional recovery partition) → apply (DISM) → boot files (bcdboot UEFI/BIOS); can reinstall only the Windows partition, supports unattend XML, driver injection, SHA-256 verification, reusable profiles and a fully automatic mode. *Boot repair* for Windows 7-11: rebuild the BCD, write the EFI/BIOS boot files, create or move the EFI partition (even in front of Windows, via a WIM copy). *Capture* a sysprepped Windows partition into a `.wim`. UI is in Russian.
 
@@ -68,13 +68,13 @@
 
 ## Сборка
 
-Нужен только `csc.exe` из .NET Framework 4 (есть в любой Windows 10/11):
+Нужен .NET SDK 8 (<https://dot.net>); результат — один самодостаточный exe:
 
 ```bat
 build.cmd
 ```
 
-Результат — `bin\Buba-Helper.exe`. Исходники лежат в [`src/`](src) (C# 5); генератор XML — в [`src/Gen/`](src/Gen) (данные берутся из `gendata.json`, вшитого в exe; обновить его из оригинала: `node devtools/export-gen-data.js <путь к generator_XML_Windows>`); оформление — `Theme.cs`. `Program.cs`, `IsoIntegrator.cs`, `Models.cs`, `Util.cs`, `Native.cs`, `IsoMount.cs`, `WimReader.cs` и главная форма `MainForm*.cs`, разбитая на части (`partial class`): интерфейс и мастер, диски, источник, разметка, профили, захват, установка, ремонт загрузчика (`MainForm.Repair.cs`), вшивание XML в ISO/WIM (`MainForm.Integrate.cs`). `build.cmd` собирает все `src\*.cs`. Версия программы — в `src\AssemblyInfo.cs`. Необязательно: `assets\bootsect.exe` (файл Microsoft, в репозиторий не входит) вшивается в exe, если лежит рядом при сборке.
+Результат — `bin\Buba-Helper.exe`. Исходники лежат в [`src/`](src) (C#, проект [`Buba-Helper.csproj`](Buba-Helper.csproj)); генератор XML — в [`src/Gen/`](src/Gen) (данные берутся из `gendata.json`, вшитого в exe; обновить его из оригинала: `node devtools/export-gen-data.js <путь к generator_XML_Windows>`); оформление — `Theme.cs`. `Program.cs`, `IsoIntegrator.cs`, `Models.cs`, `Util.cs`, `Native.cs`, `IsoMount.cs`, `WimReader.cs` и главная форма `MainForm*.cs`, разбитая на части (`partial class`): интерфейс и мастер, диски, источник, разметка, профили, захват, установка, ремонт загрузчика (`MainForm.Repair.cs`), вшивание XML в ISO/WIM (`MainForm.Integrate.cs`). `build.cmd` собирает все `src\*.cs`. Версия программы — в `src\AssemblyInfo.cs`. Необязательно: `assets\bootsect.exe` (файл Microsoft, в репозиторий не входит) вшивается в exe, если лежит рядом при сборке.
 
 ## Версии и выпуск
 
@@ -113,7 +113,7 @@ build.cmd
 
 - Режим «стереть весь диск» **необратимо уничтожает** данные на выбранном диске. Перед запуском всегда показывается диалог с моделью, размером и томами диска.
 - Протестируйте сценарий на виртуальной машине, прежде чем применять на реальных ПК.
-- Нужен .NET Framework 4 в WinPE (проверьте наличие `X:\Windows\Microsoft.NET`).
+- .NET в WinPE ставить не нужно (он вшит в exe). В WinPE нет ICU, поэтому программа работает в инвариантном режиме глобализации.
 - Не поддерживаются разбитые образы (`install.swm`).
 - Утилита поставляется «как есть» (см. [LICENSE](LICENSE)).
 

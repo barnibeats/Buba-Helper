@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>Buba-Helper</AssemblyName>
+    <RootNamespace>WinInstaller</RootNamespace>
+    <ApplicationIcon>assets\app.ico</ApplicationIcon>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CS8981;SYSLIB0003;WFO5001;CA1416</NoWarn>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src\**\*.cs" />
+    <EmbeddedResource Include="src\Gen\gendata.json" LogicalName="WinInstaller.gendata.json" />
+    <EmbeddedResource Include="assets\net-drivers.zip" LogicalName="WinInstaller.netdrivers.zip" Condition="Exists('assets\net-drivers.zip')" />
+    <EmbeddedResource Include="assets\bootsect.exe" LogicalName="WinInstaller.bootsect.exe" Condition="Exists('assets\bootsect.exe')" />
+  </ItemGroup>
+</Project>

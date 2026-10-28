@@ -141,9 +141,10 @@ namespace WinInstaller
             rbModeInstall = new UiTab { Text = "Установка ISO/WIM", Icon = "disc", Checked = true };
             rbModeCapture = new UiTab { Text = "Захват образа", Icon = "camera" };
             rbModeRepair = new UiTab { Text = "Ремонт загрузчика", Icon = "gear" };
+            rbModeDrivers = new UiTab { Text = "Драйверы", Icon = "net" };
             rbModeIntegrate = new UiTab { Text = "XML в ISO/WIM", Icon = "box" };
             rbModeXml = new UiTab { Text = "Файл ответов (XML)", Icon = "script" };
-            modeTabs = new UiTab[] { (UiTab)rbModeInstall, (UiTab)rbModeCapture, (UiTab)rbModeRepair, (UiTab)rbModeIntegrate, (UiTab)rbModeXml };
+            modeTabs = new UiTab[] { (UiTab)rbModeInstall, (UiTab)rbModeCapture, (UiTab)rbModeRepair, (UiTab)rbModeDrivers, (UiTab)rbModeIntegrate, (UiTab)rbModeXml };
             foreach (UiTab t in modeTabs) header.Controls.Add(t);
             header.SizeChanged += delegate { LayoutModeTabs(); };
             LayoutModeTabs();
@@ -157,6 +158,8 @@ namespace WinInstaller
             body.Controls.Add(tabRepair);
             tabIntegrate = new StepTabs(); tabIntegrate.Dock = DockStyle.Fill; tabIntegrate.Visible = false;
             body.Controls.Add(tabIntegrate);
+            tabDrivers = new StepTabs(); tabDrivers.Dock = DockStyle.Fill; tabDrivers.Visible = false;
+            body.Controls.Add(tabDrivers);
             navSteps = new NavList(); navSteps.Dock = DockStyle.Left; navSteps.Width = 232; navSteps.Numbered = true;
             body.Controls.Add(navSteps);
 
@@ -259,6 +262,7 @@ namespace WinInstaller
 
             BuildCaptureUi();
             BuildRepairUi();
+            BuildDriversUi();
             BuildIntegrateUi();
 
             // нижняя полоса: прогресс и статус, журнал, навигация мастера и запуск
@@ -311,7 +315,7 @@ namespace WinInstaller
             cmbEdition.SelectedIndexChanged += delegate { UpdateNav(); };
             lvVols.SelectedIndexChanged += delegate { UpdateNav(); };
             txtOut.TextChanged += delegate { UpdateNav(); };
-            foreach (TabControl tc in new TabControl[] { tabInstall, tabCapture, tabRepair, tabIntegrate })
+            foreach (TabControl tc in new TabControl[] { tabInstall, tabCapture, tabRepair, tabDrivers, tabIntegrate })
             {
                 TabControl tab = tc;
                 tab.Selecting += delegate(object s, TabControlCancelEventArgs e)
@@ -345,6 +349,7 @@ namespace WinInstaller
             {
                 if (rbModeCapture.Checked) StartCapture();
                 else if (rbModeRepair.Checked) StartRepair();
+                else if (rbModeDrivers.Checked) StartDrivers();
                 else if (rbModeIntegrate.Checked) StartIntegrate();
                 else StartInstall(false);
             };
@@ -382,6 +387,7 @@ namespace WinInstaller
             rbModeInstall.CheckedChanged += delegate { SwitchMode(); };
             rbModeCapture.CheckedChanged += delegate { SwitchMode(); };
             rbModeRepair.CheckedChanged += delegate { SwitchMode(); };
+            rbModeDrivers.CheckedChanged += delegate { SwitchMode(); };
             rbModeIntegrate.CheckedChanged += delegate { SwitchMode(); };
             rbModeXml.CheckedChanged += delegate { SwitchMode(); };
             FormClosing += delegate(object s, FormClosingEventArgs e)
@@ -403,7 +409,7 @@ namespace WinInstaller
         {
             int avail = header.Width - 232 - 12;
             int pad = 54;
-            for (; pad > 30; pad -= 2)
+            for (; pad > 12; pad -= 2)
             {
                 int total = 2 * (modeTabs.Length - 1);
                 foreach (UiTab t in modeTabs) { t.Pad = pad; total += t.PreferredW(); }
@@ -422,7 +428,7 @@ namespace WinInstaller
         /// <summary>Заполняет боковое меню шагами текущего режима.</summary>
         void RebuildNav()
         {
-            string[] steps = rbModeCapture.Checked ? CaptureSteps : rbModeRepair.Checked ? RepairSteps : rbModeIntegrate.Checked ? IntegrateSteps : InstallSteps;
+            string[] steps = rbModeCapture.Checked ? CaptureSteps : rbModeRepair.Checked ? RepairSteps : rbModeDrivers.Checked ? DriversSteps : rbModeIntegrate.Checked ? IntegrateSteps : InstallSteps;
             navSteps.ClearItems();
             foreach (string s in steps) navSteps.Add(s, null);
             navSteps.SelectSilently(CurrentTabs().SelectedIndex);

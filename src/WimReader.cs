@@ -68,7 +68,7 @@ namespace WinInstaller
             string dism = Util.FindTool("dism.exe") ?? "dism.exe";
             ProcessStartInfo psi = new ProcessStartInfo(dism, "/Get-WimInfo /WimFile:\"" + file + "\"");
             psi.UseShellExecute = false; psi.CreateNoWindow = true; psi.RedirectStandardOutput = true;
-            psi.StandardOutputEncoding = Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+            psi.StandardOutputEncoding = OemEnc.Get();
             string text;
             using (Process p = Process.Start(psi)) { text = p.StandardOutput.ReadToEnd(); p.WaitForExit(); }
             ImageInfo cur = null;
