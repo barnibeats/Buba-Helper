@@ -27,7 +27,7 @@ namespace WinInstaller
         public SysInfo Sys;
         public List<DrvPack> Packs = new List<DrvPack>();
         public string Folder;       // папка с драйверами или null
-        public bool ForceUnsigned, FastBootOff, DryRun, Builtin;
+        public bool ForceUnsigned, FastBootOff, DryRun, Builtin, BootInstall;
     }
 
     partial class MainForm
@@ -39,7 +39,7 @@ namespace WinInstaller
         ListView lvDrvSys, lvDrvFound;
         Label lblDrvSysHint, lblDrvFoundHint, lblDrvSummary;
         TextBox txtDrvFolder;
-        CheckBox chkDrvFolder, chkDrvUnsigned, chkDrvFastBoot, chkDrvBuiltin;
+        CheckBox chkDrvFolder, chkDrvUnsigned, chkDrvFastBoot, chkDrvBuiltin, chkDrvBoot;
         Button btnDrvSysRefresh, btnDrvScan, btnDrvAll, btnDrvFolder, btnDrvList, btnDrvLog;
         bool drvScanning;
         ListView lvDrvNoDrv;
@@ -92,7 +92,7 @@ namespace WinInstaller
             btnDrvOnline = Btn(c2b, "Найти и скачать драйвер", "net", 296, 214, 230, 34, -1);
             lblDrvOnlineHint = Hint(c2b, "Нужен интернет в WinPE и верное системное время. Скачанный драйвер появится в списке выше и будет добавлен в выбранную Windows (а не в WinPE).", 18, 260, 600, 70, 18);
             Gap(pgDrv, 14);
-            UiCard c3 = NewCard(pgDrv, "Дополнительно", 300);
+            UiCard c3 = NewCard(pgDrv, "Дополнительно", 340);
             chkDrvBuiltin = Add(c3, new UiCheck { Text = "Добавить встроенные сетевые драйверы: Intel I217-I219, I210/I211, Realtek 8168/8125" }, 18, 52, 760, 24);
             chkDrvFolder = Add(c3, new UiCheck { Text = "Добавить драйверы из папки (с вложенными)" }, 18, 88, 520, 24);
             txtDrvFolder = new TextBox();
@@ -100,8 +100,9 @@ namespace WinInstaller
             btnDrvFolder = Btn(c3, "Обзор…", "folder", 0, 116, 112, 32, 18);
             chkDrvUnsigned = Add(c3, new UiCheck { Text = "Разрешить неподписанные драйверы (/ForceUnsigned)" }, 18, 162, 640, 24);
             chkDrvFastBoot = Add(c3, new UiCheck { Text = "Отключить быстрый запуск и гибернацию (иначе устройства могут не инициализироваться)", Checked = true }, 18, 196, 700, 24);
-            btnDrvList = Btn(c3, "Что уже есть в системе", "log", 18, 242, 214, 34, -1);
-            btnDrvLog = Btn(c3, "Журнал установки устройств", "log", 244, 242, 250, 34, -1);
+            chkDrvBoot = Add(c3, new UiCheck { Text = "Доустановить драйверы при первой загрузке Windows (как установщик драйвера: сама, до входа в систему)", Checked = true }, 18, 232, 760, 24);
+            btnDrvList = Btn(c3, "Что уже есть в системе", "log", 18, 282, 214, 34, -1);
+            btnDrvLog = Btn(c3, "Журнал установки устройств", "log", 244, 282, 250, 34, -1);
             FinishPage(pgDrv);
 
             // 3. запуск
@@ -122,6 +123,7 @@ namespace WinInstaller
             txtDrvFolder.TextChanged += delegate { UpdateNav(); };
             chkDrvUnsigned.CheckedChanged += delegate { UpdateNav(); };
             chkDrvFastBoot.CheckedChanged += delegate { UpdateNav(); };
+            chkDrvBoot.CheckedChanged += delegate { UpdateNav(); };
             btnDrvFolder.Click += delegate
             {
                 using (FolderBrowserDialog fb = new FolderBrowserDialog())
@@ -489,6 +491,7 @@ namespace WinInstaller
             sb.AppendLine(KV("Встроенные", chkDrvBuiltin.Checked ? "сетевые Intel и Realtek" : "нет"));
             sb.AppendLine(KV("Папка", DrvFolderWanted() ? txtDrvFolder.Text.Trim() : "нет"));
             sb.AppendLine(KV("Неподписанные", chkDrvUnsigned.Checked ? "разрешены" : "нет"));
+            sb.AppendLine(KV("При 1-й загрузке", chkDrvBoot.Checked ? "принудительно доустановить драйверы" : "нет"));
             sb.AppendLine(KV("Быстрый запуск", chkDrvFastBoot.Checked ? "отключить, гибернацию удалить" : "не трогать"));
             sb.AppendLine();
             sb.Append("Windows не запускается: драйверы кладутся в её хранилище через dism /Add-Driver. Данные не удаляются.");
@@ -550,6 +553,7 @@ namespace WinInstaller
             p.ForceUnsigned = chkDrvUnsigned.Checked;
             p.FastBootOff = chkDrvFastBoot.Checked;
             p.Builtin = chkDrvBuiltin.Checked;
+            p.BootInstall = chkDrvBoot.Checked;
             p.DryRun = Program.DryRun;
             string msg = BuildDriversSummary() + (p.DryRun ? "\n\n[DRY-RUN - реально ничего не будет сделано]" : "") + "\n\nНачать?";
             if (MessageBox.Show(this, msg, "Подтверждение", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button1) != DialogResult.Yes) return;
@@ -596,6 +600,14 @@ namespace WinInstaller
                     if (rc != 0) { errors++; Log("ПРЕДУПРЕЖДЕНИЕ: драйверы из папки добавлены не полностью (код " + rc + ")."); }
                     SetProgress(++done * 100 / Math.Max(1, total));
                 }
+                if (p.BootInstall && (p.Packs.Count > 0 || p.Folder != null || p.Builtin))
+                {
+                    List<string> dirs = new List<string>();
+                    foreach (DrvPack pk in p.Packs) dirs.Add(Path.GetDirectoryName(pk.Inf));
+                    if (p.Builtin) dirs.Add(Path.Combine(Path.GetTempPath(), "Buba-Helper", "netdrv"));
+                    if (p.Folder != null) dirs.Add(p.Folder);
+                    InstallBootTask(p, dirs);
+                }
                 if (p.FastBootOff)
                 {
                     SetStatus("Отключение быстрого запуска и гибернации...");
@@ -633,6 +645,81 @@ namespace WinInstaller
                 using (System.IO.Compression.ZipArchive z = new System.IO.Compression.ZipArchive(s))
                     System.IO.Compression.ZipFileExtensions.ExtractToDirectory(z, dir);
                 return dir;
+            }
+        }
+
+        // Скрипт, который Windows сама выполняет один раз при первой загрузке (службой BubaNetFix, от SYSTEM, до входа в систему).
+        const string BootRunCmd =
+            "@echo off\r\n" +
+            "sc delete BubaNetFix >nul 2>&1\r\n" +
+            "reg delete \"HKLM\\SYSTEM\\CurrentControlSet\\Services\\BubaNetFix\" /f >nul 2>&1\r\n" +
+            "set \"R=%SystemRoot%\\BubaFix\"\r\n" +
+            "ping -n 11 127.0.0.1 >nul\r\n" +
+            "pnputil /scan-devices >nul 2>&1\r\n" +
+            "pnputil /add-driver \"%R%\\drv\\*.inf\" /subdirs /install > \"%R%\\install.log\" 2>&1\r\n" +
+            "ping -n 11 127.0.0.1 >nul\r\n" +
+            "pnputil /scan-devices >nul 2>&1\r\n" +
+            "start \"\" /min cmd.exe /c \"ping -n 8 127.0.0.1 >nul & rd /s /q \"%R%\"\"\r\n" +
+            "exit /b 0\r\n";
+
+        static void CopyDir(string src, string dst)
+        {
+            Directory.CreateDirectory(dst);
+            foreach (string f in Directory.GetFiles(src)) File.Copy(f, Path.Combine(dst, Path.GetFileName(f)), true);
+            foreach (string d in Directory.GetDirectories(src)) CopyDir(d, Path.Combine(dst, Path.GetFileName(d)));
+        }
+
+        /// <summary>
+        /// Что делает установщик драйвера в живой Windows, делаем при её первой загрузке: драйверы копируются в Windows\BubaFix,
+        /// в офлайн-реестр добавляется одноразовая служба; она (от SYSTEM, до входа в систему) выполняет pnputil /add-driver /install
+        /// на present-устройствах и удаляет себя и папку. Если устройство уже получило драйвер штатно, ничего не ломается.
+        /// </summary>
+        void InstallBootTask(DrvPlan p, List<string> dirs)
+        {
+            string root = p.Sys.Letter + ":\\Windows\\BubaFix";
+            SetStatus("Доустановка драйверов при первой загрузке Windows...");
+            if (p.DryRun) { Log("[dry-run] BubaFix: драйверов " + dirs.Count + ", служба BubaNetFix не создаётся."); return; }
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+            Directory.CreateDirectory(Path.Combine(root, "drv"));
+            int n = 0;
+            foreach (string d in dirs)
+                if (Directory.Exists(d)) CopyDir(d, Path.Combine(root, "drv", (n++) + "_" + Path.GetFileName(d.TrimEnd('\\'))));
+            File.WriteAllText(Path.Combine(root, "run.cmd"), BootRunCmd, Encoding.ASCII);
+            File.WriteAllText(Path.Combine(root, "launch.cmd"), "@echo off\r\nstart \"\" /min cmd.exe /c \"%SystemRoot%\\BubaFix\\run.cmd\"\r\n", Encoding.ASCII);
+            Log("Скопировано драйверов для доустановки: " + n);
+
+            string reg = Util.FindTool("reg.exe") ?? "reg.exe";
+            const string key = "HKLM\\BUBA_SVC";
+            string hive = p.Sys.Letter + ":\\Windows\\System32\\config\\SYSTEM";
+            RunProc(reg, "unload " + key, null, null, true);
+            bool loaded = false;
+            try
+            {
+                if (RunProc(reg, "load " + key + " \"" + hive + "\"", null, null, false) != 0) { Log("ПРЕДУПРЕЖДЕНИЕ: не удалось загрузить куст SYSTEM - доустановка при загрузке не настроена."); return; }
+                loaded = true;
+                List<string> cap = new List<string>();
+                RunProc(reg, "query " + key, null, cap, true);
+                foreach (string line in cap)
+                {
+                    Match m = Regex.Match(line, @"(ControlSet\d{3})\s*$", RegexOptions.IgnoreCase);
+                    if (!m.Success) continue;
+                    string svc = key + "\\" + m.Groups[1].Value + "\\Services\\BubaNetFix";
+                    RunProc(reg, "add \"" + svc + "\" /v Type /t REG_DWORD /d 16 /f", null, null, false);
+                    RunProc(reg, "add \"" + svc + "\" /v Start /t REG_DWORD /d 2 /f", null, null, false);
+                    RunProc(reg, "add \"" + svc + "\" /v ErrorControl /t REG_DWORD /d 0 /f", null, null, false);
+                    RunProc(reg, "add \"" + svc + "\" /v ObjectName /t REG_SZ /d LocalSystem /f", null, null, false);
+                    RunProc(reg, "add \"" + svc + "\" /v DisplayName /t REG_SZ /d \"Buba-Helper: доустановка драйверов\" /f", null, null, false);
+                    RunProc(reg, "add \"" + svc + "\" /v ImagePath /t REG_EXPAND_SZ /d \"%SystemRoot%\\System32\\cmd.exe /c %SystemRoot%\\BubaFix\\launch.cmd\" /f", null, null, false);
+                    Log("Служба BubaNetFix добавлена в " + m.Groups[1].Value + ".");
+                }
+            }
+            finally
+            {
+                if (loaded)
+                {
+                    GC.Collect(); GC.WaitForPendingFinalizers();
+                    if (RunProc(reg, "unload " + key, null, null, false) != 0) { Thread.Sleep(1500); RunProc(reg, "unload " + key, null, null, false); }
+                }
             }
         }
 
