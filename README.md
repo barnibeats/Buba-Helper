@@ -1,19 +1,30 @@
 # Buba-Helper
 
 [![build](https://github.com/barnibeats/Buba-Helper/actions/workflows/build.yml/badge.svg)](https://github.com/barnibeats/Buba-Helper/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/barnibeats/Buba-Helper)](https://github.com/barnibeats/Buba-Helper/releases/latest)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![platform: WinPE / Windows 10-11](https://img.shields.io/badge/platform-WinPE%20%7C%20Windows%2010%E2%80%9311-lightgrey)
 
-Графическая утилита для **WinPE** (Sergei Strelec и др.) и обычной Windows. Четыре режима: **установка ISO/WIM/ESD** с выбором диска, разметки GPT/MBR, размера (МБ или ГБ) и раздела восстановления; **захват** sysprep-образа в WIM; **ремонт загрузчика** Windows 7/8/10/11 (UEFI и BIOS) и **генератор файла ответов** (utounattend.xml / unattend.xml), встроенный в программу. Генератор — порт [generator_XML_Windows](https://github.com/barnibeats/generator_XML_Windows) на C#.
-Один `exe` (около 70 МБ): .NET 8 уже внутри, ничего ставить не нужно — запускается и в WinPE без .NET Framework. При запуске проверяет новую версию в [релизах](https://github.com/barnibeats/Buba-Helper/releases) и предлагает обновиться (отключить: `--no-update`).
+Графическая утилита для **WinPE** (Sergei Strelec и др.) и обычной Windows. Шесть режимов:
 
-> **In short:** a single-file WinForms tool for WinPE. *Install*: pick image (ISO/WIM/ESD) → pick disk (the WinPE boot media is excluded) → partition (GPT/MBR, size in MB or GB, optional recovery partition) → apply (DISM) → boot files (bcdboot UEFI/BIOS); can reinstall only the Windows partition, supports unattend XML, driver injection, SHA-256 verification, reusable profiles and a fully automatic mode. *Boot repair* for Windows 7-11: rebuild the BCD, write the EFI/BIOS boot files, create or move the EFI partition (even in front of Windows, via a WIM copy). *Capture* a sysprepped Windows partition into a `.wim`. UI is in Russian.
+- **установка ISO/WIM/ESD** с выбором диска, разметки GPT/MBR, размера (МБ или ГБ) и раздела восстановления;
+- **захват** sysprep-образа в WIM;
+- **ремонт загрузчика** Windows 7/8/10/11 (UEFI и BIOS);
+- **драйверы**: добавление драйверов (сеть, диски) в установленную Windows прямо из WinPE: из хранилища WinPE, из папки, из встроенного набора Intel/Realtek или из каталога Microsoft Update по ID устройства;
+- **вшивание файлов ответов в ISO/WIM**;
+- **генератор файла ответов** (autounattend.xml / unattend.xml), встроенный в программу. Генератор — порт [generator_XML_Windows](https://github.com/barnibeats/generator_XML_Windows) на C#.
+
+Один `exe` (около 70 МБ): **.NET 8 уже внутри**, ничего ставить не нужно — запускается и в WinPE без .NET Framework. При запуске проверяет новую версию в [релизах](https://github.com/barnibeats/Buba-Helper/releases/latest) и предлагает обновиться (отключить: `--no-update`).
+
+> **In short:** a single-file WinForms tool for WinPE. *Install*: pick image (ISO/WIM/ESD) → pick disk (the WinPE boot media is excluded) → partition (GPT/MBR, size in MB or GB, optional recovery partition) → apply (DISM) → boot files (bcdboot UEFI/BIOS); can reinstall only the Windows partition, supports unattend XML, driver injection, SHA-256 verification, reusable profiles and a fully automatic mode. *Boot repair* for Windows 7-11: rebuild the BCD, write the EFI/BIOS boot files, create or move the EFI partition (even in front of Windows, via a WIM copy). *Capture* a sysprepped Windows partition into a `.wim`. *Drivers*: inject network/storage drivers into an installed Windows offline from WinPE (WinPE driver store, a folder, a built-in Intel/Realtek set, or a lookup by hardware ID in the Microsoft Update Catalog). The exe is self-contained (.NET 8 inside, runs in WinPE without .NET Framework) and offers to update itself from GitHub releases on start. UI is in Russian.
 
 | Установка ISO/WIM | Захват образа |
 |---|---|
 | ![Установка ISO/WIM](docs/screenshots/mode-install.png) | ![Захват образа](docs/screenshots/mode-capture.png) |
-| **Ремонт загрузчика** | **Файл ответов (XML)** |
-| ![Ремонт загрузчика](docs/screenshots/mode-repair.png) | ![Файл ответов (XML)](docs/screenshots/mode-xml.png) |
+| **Ремонт загрузчика** | **Драйверы** |
+| ![Ремонт загрузчика](docs/screenshots/mode-repair.png) | ![Драйверы](docs/screenshots/mode-drivers.png) |
+| **Файл ответов (XML)** | |
+| ![Файл ответов (XML)](docs/screenshots/mode-xml.png) | |
 
 ## Возможности
 
@@ -44,6 +55,15 @@
 - **Порядок «EFI → Windows → остальное».** Если перед Windows нет свободного места, можно выбрать перенос системы: Windows сохраняется в WIM-копию (на другой том или во временный раздел), разделы пересоздаются (EFI 300 МБ, затем Windows того же размера, остальное не трогается), копия разворачивается обратно. Только из WinPE; копия снимается и проверяется до удаления, перед удалением — ещё одно подтверждение. Точки восстановления («System Volume Information») не переносятся.
 - Windows 7: x86-версии и версии без SP1 по UEFI загрузиться не могут (нет `Windows\Boot\EFI\bootmgfw.efi`) — программа предупредит. `bootsect.exe` берётся из папки `tools`, WinPE или PATH; если его там нет, используется вшитая в exe копия (x64, Windows 10 19041; извлекается в `%TEMP%\Buba-Helper`). В 32-разрядной WinPE вшитая копия не работает — положите x86-версию в `tools`. Чтобы вшить его самим, положите `assets\bootsect.exe` (из Windows 10/ADK, x64) перед сборкой: в репозиторий этот файл Microsoft не входит (`.gitignore`), а `build.cmd` без него собирается без вшитой копии.
 
+**Драйверы** — добавить драйверы в установленную Windows офлайн (Windows при этом не запускается)
+- Три шага: выбор установленной Windows (7/8/10/11) → драйверы → запуск. Драйверы кладутся в хранилище выбранной системы через `dism /Image:<диск>:\ /Add-Driver`; при первой загрузке Windows сама привяжет их к устройствам. Данные не затрагиваются.
+- **Из хранилища WinPE** (сеть и дисковые контроллеры): программа читает ID устройств этого ПК и сама выделяет драйверы, в INF которых они есть. Удобно, когда карта в WinPE уже работает (например, WinPE выходит в сеть), а в установленной Windows драйвера нет.
+- **Из папки** (с вложенными), по желанию с `/ForceUnsigned`.
+- **Встроенный набор сетевых драйверов** — Intel I217/I218/I219, I210/I211, Realtek 8168 и 8125 (подписанные драйверы из каталога Microsoft Update, версии на момент выпуска). Нужен, когда в WinPE нет драйвера и нет интернета. Intel I225/I226 уже входят в Windows 10. Набор вшивается при сборке (`devtools/make-net-drivers.ps1`), в репозиторий сам архив не входит.
+- **Поиск в интернете**: «Найти устройства без драйвера» показывает PCI/USB-устройства без драйвера в WinPE; «Найти и скачать драйвер» ищет по ID в [каталоге Microsoft Update](https://www.catalog.update.microsoft.com), скачивает `.cab`, распаковывает (`expand.exe`), проверяет, что INF содержит нужный ID и x64, и добавляет в выбранную Windows. Нужен интернет и верное системное время в WinPE.
+- **«Драйвер добавлен, а устройства нет»**: галочка отключает быстрый запуск (`HiberbootEnabled=0` в офлайн-реестре) и удаляет `hiberfil.sys`; кнопки «Что уже есть в системе» (`dism /Get-Drivers`) и «Журнал установки устройств» (строки `setupapi.dev.log`) помогают найти причину.
+- Ключ `--mode drivers`; ничего не меняется, пока вы не подтвердите запуск.
+
 **XML в ISO/WIM** — вшить файлы ответов в образ
 - Источник — **ISO или WIM**. Для каждого из двух файлов ответов выбирается место: **корень ISO** (как `Autounattend.xml`, его читает установщик), **внутрь WIM** (`Windows\Panther\Unattend\Unattend.xml` и `Windows\Panther\unattend.xml`, во все редакции или только в выбранные) или то и другое. Для WIM-источника доступно только «внутрь WIM».
 - ISO распаковывается в рабочую папку, WIM подключается через `dism /Mount-Image` и сохраняется `/Commit`; при сбое образ размонтируется с `/Discard`, рабочая папка удаляется. Новый ISO собирается `oscdimg` (BIOS + UEFI, метка тома сохраняется, по умолчанию UEFI без запроса «нажмите любую клавишу»); исходный образ не изменяется. Можно не собирать ISO, а оставить готовую папку.
@@ -60,9 +80,11 @@
 - Результат совпадает с оригиналом **посимвольно**, пока новые возможности выключены: `devtools/gen-compare.js` сверяет XML, предупреждения и `Start-Sysprep.cmd` на сотнях случайных состояний (два намеренных отличия описаны в начале скрипта). `devtools/check-gen.ps1` проверяет XML и синтаксис всех вшитых скриптов без установки Windows. Интерфейс проверяет встроенный «обезьяний» тест (`--selftest-ui`).
 ## Быстрый старт
 
-1. Скачайте `Buba-Helper.exe` из [Releases](../../releases) (рядом лежит `.sha256`) или соберите сами (ниже).
+1. Скачайте `Buba-Helper.exe` из [Releases](https://github.com/barnibeats/Buba-Helper/releases/latest) (рядом лежит `.sha256`) или соберите сами (ниже).
 2. Положите на флешку вместе с образами. Необязательно: папка `Drivers\`, `tools\7z.exe`, `profile.ini`.
 3. В WinPE запустите `Buba-Helper.exe`, выберите образ → диск → разметку → **УСТАНОВИТЬ WINDOWS**.
+
+Дальше программа **сама проверяет новую версию** при запуске (нужен интернет) и предлагает обновиться: скачивает релиз, сверяет SHA-256, заменяет файл и перезапускается. Отключить проверку: `--no-update`.
 
 Проверить сценарий, ничего не выполняя: `Buba-Helper.exe --dry-run` (команды `diskpart`/`dism`/`bcdboot` только пишутся в лог).
 
@@ -74,7 +96,7 @@
 build.cmd
 ```
 
-Результат — `bin\Buba-Helper.exe`. Исходники лежат в [`src/`](src) (C#, проект [`Buba-Helper.csproj`](Buba-Helper.csproj)); генератор XML — в [`src/Gen/`](src/Gen) (данные берутся из `gendata.json`, вшитого в exe; обновить его из оригинала: `node devtools/export-gen-data.js <путь к generator_XML_Windows>`); оформление — `Theme.cs`. `Program.cs`, `IsoIntegrator.cs`, `Models.cs`, `Util.cs`, `Native.cs`, `IsoMount.cs`, `WimReader.cs` и главная форма `MainForm*.cs`, разбитая на части (`partial class`): интерфейс и мастер, диски, источник, разметка, профили, захват, установка, ремонт загрузчика (`MainForm.Repair.cs`), вшивание XML в ISO/WIM (`MainForm.Integrate.cs`). `build.cmd` собирает все `src\*.cs`. Версия программы — в `src\AssemblyInfo.cs`. Необязательно: `assets\bootsect.exe` (файл Microsoft, в репозиторий не входит) вшивается в exe, если лежит рядом при сборке.
+Результат — `bin\Buba-Helper.exe`. Исходники лежат в [`src/`](src) (C#, проект [`Buba-Helper.csproj`](Buba-Helper.csproj)); генератор XML — в [`src/Gen/`](src/Gen) (данные берутся из `gendata.json`, вшитого в exe; обновить его из оригинала: `node devtools/export-gen-data.js <путь к generator_XML_Windows>`); оформление — `Theme.cs`. `Program.cs`, `IsoIntegrator.cs`, `Models.cs`, `Util.cs`, `Native.cs`, `IsoMount.cs`, `WimReader.cs` и главная форма `MainForm*.cs`, разбитая на части (`partial class`): интерфейс и мастер, диски, источник, разметка, профили, захват, установка, ремонт загрузчика (`MainForm.Repair.cs`), вшивание XML в ISO/WIM (`MainForm.Integrate.cs`). Вкладка «Драйверы» — `MainForm.Drivers.cs`, поиск в каталоге Microsoft Update — `DriverCatalog.cs`, проверка и установка обновлений — `MainForm.Update.cs`, OEM-кодировка — `OemEnc.cs`. Версия программы — в `src\AssemblyInfo.cs`. Необязательно (в репозиторий не входят, `.gitignore`): `assets\bootsect.exe` (файл Microsoft) и `assets\net-drivers.zip` (встроенные сетевые драйверы; собрать: `powershell -File devtools\make-net-drivers.ps1` после `build.cmd`, затем снова `build.cmd`) вшиваются в exe, если лежат рядом при сборке.
 
 ## Версии и выпуск
 
@@ -82,7 +104,7 @@ build.cmd
 
 1. поднять версию в `src\AssemblyInfo.cs` и перенести записи из «Не выпущено» в раздел новой версии в `CHANGELOG.md`;
 2. закоммитить, `git tag -a vX.Y.Z -m "..."`, `git push origin main vX.Y.Z`;
-3. GitHub Actions соберёт `Buba-Helper.exe`, проверит генератор XML и опубликует релиз с `.sha256` (в нём нет вшитого `bootsect.exe`; свою сборку с ним делайте локально).
+3. GitHub Actions соберёт `Buba-Helper.exe` (на .NET 8, с встроенными сетевыми драйверами из каталога Microsoft Update), проверит генератор XML и опубликует релиз с `.sha256` (в нём нет вшитого `bootsect.exe`; свою сборку с ним делайте локально). Установленные программы увидят новый релиз при запуске и предложат обновиться.
 
 ## Командная строка
 
@@ -94,7 +116,8 @@ build.cmd
 | `--export-icon <файл.ico>` | записать значок приложения (нужен только для пересборки `assets\app.ico`) |
 | `--gen <настройки.json> <out.xml>` | сгенерировать файл ответов без окна (`--preset <id>`, `--launcher <файл.cmd>`); рядом пишется `out.xml.log` с предупреждениями |
 | `--integrate <iso или wim> <результат> [--root xml] [--wim xml] [--both xml] [--index 3,4] [--label L] [--work папка] [--folder] [--prompt]` | вшить файлы ответов без окна: `--root` — в корень ISO, `--wim` — внутрь WIM, `--both` — туда и туда; журнал пишется в `<результат>.log`, код выхода 0/1 |
-| `--mode install/capture/repair/integrate/xml`, `--page N` | открыть окно сразу в нужном режиме и на нужной странице |
+| `--no-update` | не проверять новую версию при запуске |
+| `--mode install/capture/repair/drivers/integrate/xml`, `--page N` | открыть окно сразу в нужном режиме и на нужной странице |
 | `--selftest-ui <отчёт.txt> [N] [seed]` | самопроверка интерфейса генератора |
 | `--yes` | пропустить подтверждение. **Опасно:** диск стирается без вопроса. Только вместе с `--auto` |
 
@@ -107,13 +130,17 @@ build.cmd
           → dism /Apply-Image → [dism /Add-Driver] → [unattend.xml]
           → bcdboot (/f UEFI  или  /f BIOS) → проверка bootmgfw.efi / bootmgr
 ```
+Вкладка «Драйверы»: `[найти драйверы в WinPE / скачать из каталога / папка / встроенный набор]` → `dism /Image:C:\ /Add-Driver` → `[HiberbootEnabled=0, удалить hiberfil.sys]`.
+
 Подробнее о захвате и sysprep — в [`docs/sysprep-workflow.md`](docs/sysprep-workflow.md).
 
 ## Безопасность и ограничения
 
 - Режим «стереть весь диск» **необратимо уничтожает** данные на выбранном диске. Перед запуском всегда показывается диалог с моделью, размером и томами диска.
 - Протестируйте сценарий на виртуальной машине, прежде чем применять на реальных ПК.
-- .NET в WinPE ставить не нужно (он вшит в exe). В WinPE нет ICU, поэтому программа работает в инвариантном режиме глобализации.
+- .NET в WinPE ставить не нужно (он вшит в exe). В WinPE нет ICU, поэтому программа работает в инвариантном режиме глобализации. Сборка только x64 (32-разрядная WinPE не поддерживается).
+- Драйверы из каталога Microsoft Update и встроенный набор подходят не ко всем моделям карт; гарантии, что адаптер появится, нет. Если не помогло — смотрите диспетчер устройств и «Журнал установки устройств».
+- Встроенные драйверы Intel и Realtek принадлежат их правообладателям и лежат в релизном exe в том виде, как их публикует Microsoft; проверьте их лицензии, если собираетесь распространять exe дальше.
 - Не поддерживаются разбитые образы (`install.swm`).
 - Утилита поставляется «как есть» (см. [LICENSE](LICENSE)).
 

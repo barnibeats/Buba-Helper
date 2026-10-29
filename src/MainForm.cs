@@ -126,7 +126,11 @@ namespace WinInstaller
                 if (Program.StartMode == "xml") { rbModeXml.Checked = true; if (genEditor != null) genEditor.Go(Program.StartPage); }
                 else if (Program.StartMode == "capture") rbModeCapture.Checked = true;
                 else if (Program.StartMode == "integrate") rbModeIntegrate.Checked = true;
-                else if (Program.StartMode == "drivers") rbModeDrivers.Checked = true;
+                else if (Program.StartMode == "drivers")
+                {
+                    rbModeDrivers.Checked = true;
+                    if (Program.StartPage > 0 && Program.StartPage < tabDrivers.TabCount) tabDrivers.SelectedIndex = Program.StartPage;
+                }
                 else if (Program.StartMode == "repair")
                 {
                     rbModeRepair.Checked = true;
